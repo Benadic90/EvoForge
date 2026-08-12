@@ -87,4 +87,8 @@ class AgentExecutor(ABC):
     @abstractmethod
     def execute(self, context: AgentContext) -> AgentResult:
         """Executes a task using the standardized AgentContext."""
-        pass
+
+    def health_check(self) -> bool:
+        """Checks if the executor backend is reachable and configured."""
+        return True
+

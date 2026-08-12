@@ -2,15 +2,15 @@ from datetime import UTC, datetime, timedelta
 
 import structlog
 
+from evoforge.agents.contracts import AgentContext, AgentContract, AgentExecutor, AgentResult
+from evoforge.agents.registry import AgentRegistry
 from evoforge.memory.database import Database
 from evoforge.memory.idempotency import IdempotencyManager
 from evoforge.memory.manager import MemoryManager
 from evoforge.memory.obsidian import ObsidianManager
-from evoforge.memory.state import WorkflowStage, WorkflowState
+from evoforge.memory.state import WorkflowStage
 from evoforge.orchestrator.engine import OrchestratorEngine
 from evoforge.orchestrator.workflows import WorkflowDefinition, WorkflowTask
-from evoforge.agents.registry import AgentRegistry
-from evoforge.agents.contracts import AgentContract, AgentContext, AgentResult, AgentExecutor
 
 logger = structlog.get_logger(__name__)
 

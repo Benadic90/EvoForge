@@ -130,4 +130,20 @@ This document tracks our progress, the tools and technologies used, and the next
 - Implement more robust memory context window optimization.
 - Build a front-end dashboard for observability.
 
+## 2026 Architectural Upgrade
 
+### Phase 1: Runtime Integrity
+**Status**: Completed
+- Implemented robust `run_command` boundaries, shell timeouts, and proper task cancellation.
+- Hardened database locking and concurrency control for long-running workflows.
+
+### Phase 2: Agent Contracts & Capabilities
+**Status**: Completed
+- Standardized all agents behind the `AgentContract` interface.
+- Introduced formal `AgentCapability` ENUMs for dynamic routing.
+
+### Phase 3: Dynamic Model & Executor Routing
+**Status**: Completed (Phase 3A, 3B, 3C)
+- **Phase 3A (Architecture)**: Built the capability-based `ExecutorRouter` and decoupled specific AI models from agents.
+- **Phase 3B (Executors)**: Implemented real API integration for Ollama, Gemini, and NVIDIA.
+- **Phase 3C (Adaptive Routing)**: Deployed the `adaptive-v1` routing policy with empirical recency decay scoring and replaced mock metrics in the Visual Brain with live SQLite telemetry endpoints.

@@ -71,3 +71,72 @@ class MemoryManager:
         except Exception as e:
             logger.error("checkpoint_save_failed", workflow_id=workflow_state.workflow_id, error=str(e))
             raise
+
+    def record_execution_telemetry(
+        self,
+        task_id: str,
+        workflow_id: str,
+        executor_id: str,
+        success: bool,
+        **kwargs,
+    ) -> None:
+        """Records execution telemetry for router scoring."""
+        self.db.record_execution_telemetry(
+            task_id=task_id,
+            workflow_id=workflow_id,
+            executor_id=executor_id,
+            success=success,
+            **kwargs,
+        )
+
+    def record_routing_decision(
+        self,
+        task_id: str,
+        workflow_id: str,
+        selected_executor_id: str,
+        selected_score: float,
+        decision_reason: str,
+        **kwargs,
+    ) -> None:
+        """Persists a routing decision for explainability and auditability."""
+        self.db.record_routing_decision(
+            task_id=task_id,
+            workflow_id=workflow_id,
+            selected_executor_id=selected_executor_id,
+            selected_score=selected_score,
+            decision_reason=decision_reason,
+            **kwargs,
+        )
+
+    def get_routing_decisions(self, limit: int = 50, offset: int = 0) -> list[dict]:
+        """Retrieves recent routing decisions."""
+        return self.db.get_routing_decisions(limit=limit, offset=offset)
+
+    def get_routing_decision(self, task_id: str) -> dict | None:
+        """Gets routing decision by task id."""
+        return self.db.get_routing_decision(task_id)
+
+    def get_executor_stats(self, executor_id: str | None = None) -> dict[str, dict[str, float | int]]:
+        """Returns empirical stats per executor."""
+        return self.db.get_executor_stats(executor_id)
+
+    def get_task_type_stats(
+        self, task_type: str | None = None, executor_id: str | None = None
+    ) -> list[dict]:
+        """Returns task-type specific performance statistics."""
+        return self.db.get_task_type_stats(task_type=task_type, executor_id=executor_id)
+
+    def get_recency_weighted_stats(
+        self,
+        executor_id: str,
+        half_life_days: float = 7.0,
+        task_type: str | None = None,
+    ) -> dict[str, float | int]:
+        """Returns recency-decay weighted statistics for an executor."""
+        return self.db.get_recency_weighted_stats(
+            executor_id=executor_id,
+            half_life_days=half_life_days,
+            task_type=task_type,
+        )
+
+

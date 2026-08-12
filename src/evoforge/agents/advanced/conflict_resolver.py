@@ -33,3 +33,7 @@ class ConflictResolver:
         except Exception as e:
             logger.error("conflict_resolution_failed", error=str(e))
             return "Fallback resolution: Defer to human review."
+
+
+ConflictResolverAgent = ConflictResolver
+

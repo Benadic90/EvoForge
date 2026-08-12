@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Any
-from pydantic import BaseModel, Field
 
 import structlog
+from pydantic import BaseModel, Field
 
 from evoforge.agents.capabilities import AgentCapability
 
@@ -32,17 +32,14 @@ class ModelProvider(ABC):
     @abstractmethod
     def provider_id(self) -> str:
         """Unique identifier for the provider (e.g. 'gemini', 'ollama')."""
-        pass
 
     @abstractmethod
     def list_models(self) -> list[ModelMetadata]:
         """List all models currently provided by this provider."""
-        pass
 
     @abstractmethod
     def get_model_metadata(self, model_id: str) -> ModelMetadata | None:
         """Get metadata for a specific model."""
-        pass
 
     @abstractmethod
     def generate(self, model_id: str, prompt: str, **kwargs) -> Any:
@@ -50,12 +47,10 @@ class ModelProvider(ABC):
         Generate a completion using the specified model.
         Providers wrap litellm, google-genai, etc. inside here.
         """
-        pass
 
     @abstractmethod
     def health_check(self) -> bool:
         """Check if the provider is currently accessible."""
-        pass
 
 
 class ModelRegistry:

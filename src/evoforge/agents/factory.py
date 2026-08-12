@@ -1,19 +1,17 @@
 from evoforge.agents.adapters import LegacyAgentAdapter
-from evoforge.agents.capabilities import AgentCapability
-from evoforge.agents.contracts import AgentContract
-from evoforge.agents.registry import AgentRegistry
-
-from evoforge.agents.core.developer import DeveloperAgent
-from evoforge.agents.core.qa import QAAgent
-from evoforge.agents.core.reviewer import ReviewerAgent
-from evoforge.agents.core.security import SecurityAgent
-
 from evoforge.agents.advanced.architect import ArchitectAgent
 from evoforge.agents.advanced.conflict_resolver import ConflictResolverAgent
 from evoforge.agents.advanced.devops import DevOpsAgent
 from evoforge.agents.advanced.documentation import DocumentationAgent
 from evoforge.agents.advanced.planner import PlannerAgent
 from evoforge.agents.advanced.research import ResearchAgent
+from evoforge.agents.capabilities import AgentCapability
+from evoforge.agents.contracts import AgentContract
+from evoforge.agents.core.developer import DeveloperAgent
+from evoforge.agents.core.qa import QAAgent
+from evoforge.agents.core.reviewer import ReviewerAgent
+from evoforge.agents.core.security import SecurityAgent
+from evoforge.agents.registry import AgentRegistry
 
 
 def build_agent_registry(router, tools) -> AgentRegistry:

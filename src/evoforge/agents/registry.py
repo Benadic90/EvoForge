@@ -1,6 +1,7 @@
+import builtins
 from collections.abc import Callable
 from inspect import signature
-from typing import Any, List
+from typing import Any
 
 import structlog
 
@@ -37,7 +38,7 @@ class ToolRegistry:
             raise ValueError(f"Tool {name} not found in registry.")
         return self.tools[name]
 
-    def list_tools(self) -> List[dict[str, str]]:
+    def list_tools(self) -> list[dict[str, str]]:
         return [{"name": t.name, "description": t.description} for t in self.tools.values()]
 
 
@@ -65,7 +66,6 @@ class AgentRegistry:
             raise ValueError(f"Agent {contract.name} is missing ID or version.")
             
         # Normally we'd validate required_tools against ToolRegistry here if we had a ref to it
-        pass
 
     def get(self, agent_id: str) -> tuple[AgentContract, AgentExecutor]:
         """Retrieves an agent contract and executor by ID."""
@@ -73,7 +73,7 @@ class AgentRegistry:
             raise KeyError(f"Agent '{agent_id}' not found in registry.")
         return self._agents[agent_id]
 
-    def list(self) -> List[AgentContract]:
+    def list(self) -> list[AgentContract]:
         """Lists all registered agent contracts."""
         return [contract for contract, _ in self._agents.values()]
 
@@ -94,7 +94,7 @@ class AgentRegistry:
     def has(self, agent_id: str) -> bool:
         return agent_id in self._agents
 
-    def find_by_capability(self, capability: AgentCapability) -> List[AgentContract]:
+    def find_by_capability(self, capability: AgentCapability) -> builtins.list[AgentContract]:
         """Finds all agents that have a specific capability."""
         return [c for c, _ in self._agents.values() if capability in c.capabilities]
 

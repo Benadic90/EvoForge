@@ -100,7 +100,18 @@ class EventEmitter:
     """Central event emitter for the system."""
     def __init__(self, store: EventStore | None = None):
         self.store = store
-        
+        self._handlers: dict[str, list[Any]] = {}
+
+    def on(self, event_type: str, handler: Any) -> None:
+        """Register an in-memory listener callback for an event type."""
+        if event_type not in self._handlers:
+            self._handlers[event_type] = []
+        self._handlers[event_type].append(handler)
+
+    def subscribe(self, event_type: str, handler: Any) -> None:
+        """Alias for on()."""
+        self.on(event_type, handler)
+
     def emit(
         self,
         event_type: str,
@@ -137,8 +148,16 @@ class EventEmitter:
         # Persist to store if configured
         if self.store:
             self.store.record(event)
+
+        # Notify in-memory listeners
+        for handler in self._handlers.get(event_type, []):
+            try:
+                handler(event)
+            except Exception as e:
+                logger.warning("event_handler_failed", event_type=event_type, error=str(e))
             
         return event
 
 # Global emitter instance that can be configured with a store at startup
 emitter = EventEmitter()
+

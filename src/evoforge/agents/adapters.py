@@ -1,7 +1,7 @@
 import time
 
 from evoforge.agents.base import BaseAgent
-from evoforge.agents.contracts import AgentContract, AgentContext, AgentExecutor, AgentResult
+from evoforge.agents.contracts import AgentContext, AgentContract, AgentExecutor, AgentResult
 from evoforge.model_router.classifier import TaskComplexity, TaskType
 
 
@@ -29,11 +29,11 @@ class LegacyAgentAdapter(AgentExecutor):
                 test_output_path = context.metadata.get("test_output_path", "test_output.py")
                 # qa.py uses write_tests(self, description, test_file_path)
                 # We handle it dynamically just in case it doesn't strictly match the type signature
-                result_text = getattr(self.legacy_agent, "write_tests")(context.task_description, test_output_path)
+                result_text = self.legacy_agent.write_tests(context.task_description, test_output_path)
             elif agent_id == "reviewer":
-                result_text = getattr(self.legacy_agent, "review_changes")(context.task_description)
+                result_text = self.legacy_agent.review_changes(context.task_description)
             elif agent_id == "security":
-                result_text = getattr(self.legacy_agent, "audit_code")(context.task_description)
+                result_text = self.legacy_agent.audit_code(context.task_description)
             else:
                 # Default fallback for agents that just use think_and_act directly
                 # We pass mock/default Enums if they are required by the legacy signature

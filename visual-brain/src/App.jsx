@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Filter, Settings2, Bell, UserCircle2, Loader2 } from 'lucide-react';
+import { Search, Filter, Settings2 } from 'lucide-react';
 import Sidebar from './Sidebar';
 import KnowledgeGraph from './KnowledgeGraph';
 import MetricsWidget from './MetricsWidget';
@@ -11,31 +11,62 @@ import Deployments from './Deployments';
 import Settings from './Settings';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('settings');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [graphData, setGraphData] = useState(null);
-  const [metrics, setMetrics] = useState({
-    developer_skill_increase: '+18%',
-    developer_points: 74.2,
-    security_detection_rate: '98.4%',
-    total_agents: 5
+  const [systemStatus, setSystemStatus] = useState({
+    system_state: 'Optimal',
+    active_workflows: 0,
+    failed_workflows: 0,
+    healthy_executors: 3,
+    unhealthy_executors: 0
   });
-
-  const workflows = [
-    { name: 'Dev Pipeline 01', time: '1 min ago', status: 'running' },
-    { name: 'Security Audit', time: '5 min ago', status: 'success' },
-    { name: 'Auto Deployment', time: '12 min ago', status: 'success' },
-  ];
+  const [metrics, setMetrics] = useState({
+    developer_skill_increase: '0 runs',
+    developer_points: 0.0,
+    security_detection_rate: 'N/A',
+    router_accuracy: 'N/A',
+    total_agents: 11
+  });
+  const [recentEvents, setRecentEvents] = useState([]);
 
   useEffect(() => {
-    fetch('http://localhost:8000/api/graph/knowledge')
-      .then(res => res.json())
-      .then(data => setGraphData(data))
-      .catch(err => console.error("Error fetching graph data", err));
+    const fetchAllData = () => {
+      // 1. System Status
+      fetch('http://localhost:8000/api/status')
+        .then(res => res.json())
+        .then(data => setSystemStatus(data))
+        .catch(err => console.error("Error fetching status", err));
 
-    fetch('http://localhost:8000/api/agents/metrics')
-      .then(res => res.json())
-      .then(data => setMetrics(data))
-      .catch(err => console.error("Error fetching metrics", err));
+      // 2. Knowledge Graph
+      fetch('http://localhost:8000/api/graph/knowledge')
+        .then(res => res.json())
+        .then(data => setGraphData(data))
+        .catch(err => console.error("Error fetching graph data", err));
+
+      // 3. Agent Metrics
+      fetch('http://localhost:8000/api/agents/metrics')
+        .then(res => res.json())
+        .then(data => setMetrics(data))
+        .catch(err => console.error("Error fetching metrics", err));
+
+      // 4. Events & Telemetry
+      fetch('http://localhost:8000/api/events/recent?limit=10')
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data) && data.length > 0) {
+            setRecentEvents(data.map(evt => ({
+              name: evt.event_type,
+              time: evt.created_at ? new Date(evt.created_at).toLocaleTimeString() : 'just now',
+              status: evt.event_type.includes('failed') ? 'failed' : (evt.event_type.includes('started') ? 'running' : 'success')
+            })));
+          }
+        })
+        .catch(err => console.error("Error fetching events", err));
+    };
+
+    fetchAllData();
+    const interval = setInterval(fetchAllData, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   const renderContent = () => {
@@ -64,22 +95,22 @@ export default function App() {
             
             <div className="right-panel">
               <MetricsWidget 
-                title="Developer Agent Skill Level" 
+                title="Router Accuracy & Empirical Score" 
                 type="donut"
-                value={metrics.developer_skill_increase}
-                description={`Progressing +3.1 pts`}
-                subtext="last commit: 3m ago"
+                value={metrics.router_accuracy}
+                description={`${metrics.developer_skill_increase} total`}
+                subtext="adaptive routing active"
               />
               
               <MetricsWidget 
-                title="Security Agent Detection Rate" 
+                title="Developer Quality Rating" 
                 type="sparkline"
-                value={metrics.security_detection_rate} 
-                description="0 vulnerabilities detected"
-                subtext="real-time scanning"
+                value={`${metrics.developer_points} pts`} 
+                description={`Executors: ${systemStatus.healthy_executors} online`}
+                subtext="real-time telemetry"
               />
               
-              <WorkflowFeed workflows={workflows} />
+              <WorkflowFeed workflows={recentEvents} />
             </div>
           </div>
         </>
@@ -116,11 +147,10 @@ export default function App() {
       <main className="main-content">
         <header className="header">
           <div className="header-left">
-            <span>Project: <span className="highlight">Autonomous Dev (active)</span></span>
-            <span>System Status: <span className="highlight">Optimal</span></span>
+            <span>Active Workflows: <span className="highlight">{systemStatus.active_workflows}</span></span>
+            <span>System Status: <span className="highlight">{systemStatus.system_state}</span></span>
+            <span>Healthy Backends: <span className="highlight">{systemStatus.healthy_executors}</span></span>
           </div>
-          
-          {/* Header right intentionally left empty as requested */}
         </header>
         
         {renderContent()}

@@ -1,7 +1,9 @@
 from enum import Enum
+
 from pydantic import BaseModel, Field
 
 from evoforge.agents.capabilities import AgentCapability
+
 
 class TaskClassification(str, Enum):
     CODING = "coding"

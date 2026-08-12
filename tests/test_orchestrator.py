@@ -1,13 +1,15 @@
 from unittest.mock import MagicMock
+
 import pytest
 
+from evoforge.agents.contracts import AgentContext, AgentContract, AgentExecutor, AgentResult
+from evoforge.agents.registry import AgentRegistry
 from evoforge.memory.events import emitter
 from evoforge.memory.manager import MemoryManager
 from evoforge.memory.state import WorkflowStage
 from evoforge.orchestrator.engine import OrchestratorEngine
-from evoforge.agents.registry import AgentRegistry
-from evoforge.agents.contracts import AgentContract, AgentContext, AgentResult, AgentExecutor
 from evoforge.orchestrator.workflows import TaskPriority, WorkflowDefinition, WorkflowTask
+
 
 class MockExecutor(AgentExecutor):
     def __init__(self):

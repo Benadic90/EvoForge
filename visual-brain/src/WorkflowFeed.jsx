@@ -10,25 +10,32 @@ export default function WorkflowFeed({ workflows }) {
       <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '-8px' }}>active pipelines</div>
       
       <div style={{ overflowY: 'hidden', flex: 1, marginTop: '8px', paddingRight: '8px' }}>
-        {workflows.map((wf, idx) => (
-          <div key={idx} className="workflow-item">
-            <div className="timeline">
-               <div className={`timeline-dot ${wf.status}`}></div>
-               {idx !== workflows.length - 1 && <div className="timeline-line"></div>}
-            </div>
-            
-            <div className="workflow-details">
-              <div>
-                <div className="workflow-title">{wf.name}</div>
-                <div className="workflow-meta">{wf.time}</div>
-              </div>
-              <div className={`workflow-badge ${wf.status}`}>
-                {wf.status === 'running' ? 'RUNNING' : 'SUCCESS'}
-              </div>
-            </div>
+        {(!workflows || workflows.length === 0) ? (
+          <div style={{ padding: '24px 8px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+            No recent workflow events recorded. Start a workflow to observe telemetry.
           </div>
-        ))}
+        ) : (
+          workflows.map((wf, idx) => (
+            <div key={idx} className="workflow-item">
+              <div className="timeline">
+                 <div className={`timeline-dot ${wf.status}`}></div>
+                 {idx !== workflows.length - 1 && <div className="timeline-line"></div>}
+              </div>
+              
+              <div className="workflow-details">
+                <div>
+                  <div className="workflow-title">{wf.name}</div>
+                  <div className="workflow-meta">{wf.time}</div>
+                </div>
+                <div className={`workflow-badge ${wf.status}`}>
+                  {wf.status === 'running' ? 'RUNNING' : (wf.status === 'failed' ? 'FAILED' : 'SUCCESS')}
+                </div>
+              </div>
+            </div>
+          ))
+        )}
       </div>
+
     </div>
   );
 }

@@ -1,27 +1,42 @@
+import os
+import time
 from typing import Any
+import urllib.error
+import urllib.request
 
+import litellm
 import structlog
+
 
 from evoforge.agents.capabilities import AgentCapability
 from evoforge.agents.contracts import AgentContext, AgentExecutor, AgentResult
 
 logger = structlog.get_logger(__name__)
 
+# Suppress litellm debug noise
+litellm.suppress_debug_info = True
+
+
 class ExecutorRegistry:
     """Registry tracking all available execution environments/backends."""
+
     def __init__(self):
         self._executors: dict[str, AgentExecutor] = {}
         self._capabilities: dict[str, list[AgentCapability]] = {}
-        self._health: dict[str, bool] = {}
+        self._health_override: dict[str, bool] = {}
         self._enabled: dict[str, bool] = {}
 
-    def register(self, executor_id: str, executor: AgentExecutor, capabilities: list[AgentCapability]):
+    def register(
+        self,
+        executor_id: str,
+        executor: AgentExecutor,
+        capabilities: list[AgentCapability],
+    ):
         if executor_id in self._executors:
             raise ValueError(f"Executor '{executor_id}' already registered.")
-        
+
         self._executors[executor_id] = executor
         self._capabilities[executor_id] = capabilities
-        self._health[executor_id] = True
         self._enabled[executor_id] = True
         logger.info("executor_registered", executor_id=executor_id)
 
@@ -32,81 +47,505 @@ class ExecutorRegistry:
 
     def list_all(self) -> list[str]:
         return list(self._executors.keys())
-        
+
     def get_capabilities(self, executor_id: str) -> list[AgentCapability]:
         return self._capabilities.get(executor_id, [])
-        
+
     def is_enabled(self, executor_id: str) -> bool:
         return self._enabled.get(executor_id, False)
-        
+
+    def set_enabled(self, executor_id: str, enabled: bool):
+        if executor_id in self._executors:
+            self._enabled[executor_id] = enabled
+
     def is_healthy(self, executor_id: str) -> bool:
-        # In a real system, we'd poll or query the executor
-        return self._health.get(executor_id, False)
+        """Check health via explicit override or live executor health check."""
+        if executor_id not in self._executors:
+            return False
+
+        # If administratively overridden, return that
+        if executor_id in self._health_override:
+            return self._health_override[executor_id]
+
+        executor = self._executors[executor_id]
+        try:
+            return executor.health_check()
+        except Exception as e:
+            logger.warning("executor_health_check_failed", executor_id=executor_id, error=str(e))
+            return False
 
     def set_health(self, executor_id: str, healthy: bool):
-        if executor_id in self._health:
-            self._health[executor_id] = healthy
+        """Allows test fixtures or operators to explicitly force health status."""
+        self._health_override[executor_id] = healthy
+
+
+def _classify_error(error: Exception) -> tuple[str, bool]:
+    """Classifies an exception into a standard failure class and retryable flag."""
+    err_str = str(error).lower()
+
+    if isinstance(error, TimeoutError) or "timeout" in err_str or "timed out" in err_str:
+        return "timeout", True
+    if "rate limit" in err_str or "429" in err_str or "quota" in err_str or "resource exhausted" in err_str:
+        return "rate_limit", True
+    if "connection" in err_str or "refused" in err_str or "unreachable" in err_str:
+        return "connection_error", True
+    if "auth" in err_str or "api key" in err_str or "unauthorized" in err_str or "401" in err_str or "403" in err_str:
+        return "auth_error", False
+    if "context length" in err_str or "maximum context" in err_str or "token limit" in err_str:
+        return "context_length_exceeded", False
+
+    return "general_error", False
+
 
 
 class LocalModelExecutor(AgentExecutor):
-    """Executes a task using a local model (e.g. Ollama)."""
+    """Executes a task using a local model endpoint (e.g. Ollama)."""
+
+    def __init__(
+        self,
+        model_id: str = "qwen2.5-coder:7b-instruct-q4_K_M",
+        endpoint: str = "http://localhost:11434",
+        timeout_seconds: float = 60.0,
+    ):
+        self.model_id = model_id
+        self.endpoint = endpoint.rstrip("/")
+        self.timeout_seconds = timeout_seconds
+
+    def health_check(self) -> bool:
+        """Checks if the local Ollama instance is reachable."""
+        try:
+            req = urllib.request.Request(f"{self.endpoint}/api/tags", headers={"User-Agent": "EvoForge"})
+            with urllib.request.urlopen(req, timeout=2.0) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
+
     def execute(self, context: AgentContext) -> AgentResult:
-        logger.info("executing_task_local", task_id=context.task_id)
-        # Mock logic
-        return AgentResult(
-            success=True,
-            agent_id="local_model_executor",
-            task_id=context.task_id,
-            workflow_id=context.workflow_id,
-            summary="Executed locally via Ollama.",
-            metrics={"latency_ms": 1500, "cost": 0.0}
+        logger.info("executing_task_local", task_id=context.task_id, model=self.model_id)
+
+        if context.dry_run:
+            return AgentResult(
+                success=True,
+                agent_id="local_model_executor",
+                task_id=context.task_id,
+                workflow_id=context.workflow_id,
+                summary=f"[DRY RUN] Simulated local model execution ({self.model_id}) for task: {context.task_description}",
+                metrics={
+                    "latency_ms": 0.0,
+                    "cost": 0.0,
+                    "provider": "ollama",
+                    "model": self.model_id,
+                    "dry_run": True,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                },
+            )
+
+        start_time = time.time()
+        prompt = (
+            f"You are executing an autonomous engineering task.\n"
+            f"Stage: {context.current_stage.value}\n"
+            f"Task: {context.task_description}\n"
         )
+        messages = [{"role": "user", "content": prompt}]
+
+        litellm_model = f"ollama/{self.model_id}"
+        try:
+            response = litellm.completion(
+                model=litellm_model,
+                messages=messages,
+                api_base=self.endpoint,
+                timeout=self.timeout_seconds,
+            )
+            duration_ms = (time.time() - start_time) * 1000.0
+            content = response.choices[0].message.content or ""
+            input_tokens = getattr(response.usage, "prompt_tokens", 0) if response.usage else 0
+            output_tokens = getattr(response.usage, "completion_tokens", 0) if response.usage else 0
+
+            return AgentResult(
+                success=True,
+                agent_id="local_model_executor",
+                task_id=context.task_id,
+                workflow_id=context.workflow_id,
+                summary=content[:500] if len(content) > 500 else content,
+                metrics={
+                    "latency_ms": duration_ms,
+                    "cost": 0.0,
+                    "provider": "ollama",
+                    "model": self.model_id,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                },
+                metadata={"full_output": content},
+            )
+        except Exception as e:
+            duration_ms = (time.time() - start_time) * 1000.0
+            fail_class, retryable = _classify_error(e)
+            logger.warning("local_execution_failed", error=str(e), failure_class=fail_class)
+            return AgentResult(
+                success=False,
+                agent_id="local_model_executor",
+                task_id=context.task_id,
+                workflow_id=context.workflow_id,
+                summary=f"Local execution failed ({fail_class}): {e!s}",
+                errors=[str(e)],
+                metrics={
+                    "latency_ms": duration_ms,
+                    "cost": 0.0,
+                    "provider": "ollama",
+                    "model": self.model_id,
+                    "failure_class": fail_class,
+                    "retryable": retryable,
+                },
+            )
+
 
 class GeminiExecutor(AgentExecutor):
     """Executes a task using Google's Gemini API."""
+
+    def __init__(
+        self,
+        model_id: str = "gemini/gemini-2.5-flash",
+        timeout_seconds: float = 60.0,
+    ):
+        self.model_id = model_id
+        self.timeout_seconds = timeout_seconds
+
+    def health_check(self) -> bool:
+        """Checks if Gemini API credentials exist."""
+        return bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
+
     def execute(self, context: AgentContext) -> AgentResult:
-        logger.info("executing_task_gemini", task_id=context.task_id)
-        # Mock logic
-        return AgentResult(
-            success=True,
-            agent_id="gemini_executor",
-            task_id=context.task_id,
-            workflow_id=context.workflow_id,
-            summary="Executed via Gemini API.",
-            metrics={"latency_ms": 800, "cost": 0.02}
+        logger.info("executing_task_gemini", task_id=context.task_id, model=self.model_id)
+
+        if context.dry_run:
+            return AgentResult(
+                success=True,
+                agent_id="gemini_executor",
+                task_id=context.task_id,
+                workflow_id=context.workflow_id,
+                summary=f"[DRY RUN] Simulated Gemini execution ({self.model_id}) for task: {context.task_description}",
+                metrics={
+                    "latency_ms": 0.0,
+                    "cost": 0.0,
+                    "provider": "gemini",
+                    "model": self.model_id,
+                    "dry_run": True,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                },
+            )
+
+        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        if not api_key:
+            return AgentResult(
+                success=False,
+                agent_id="gemini_executor",
+                task_id=context.task_id,
+                workflow_id=context.workflow_id,
+                summary="Gemini execution failed: No GEMINI_API_KEY or GOOGLE_API_KEY in environment.",
+                errors=["Missing GEMINI_API_KEY credentials"],
+                metrics={
+                    "latency_ms": 0.0,
+                    "cost": 0.0,
+                    "provider": "gemini",
+                    "model": self.model_id,
+                    "failure_class": "missing_credentials",
+                    "retryable": False,
+                },
+            )
+
+        start_time = time.time()
+        prompt = (
+            f"You are executing an autonomous engineering task.\n"
+            f"Stage: {context.current_stage.value}\n"
+            f"Task: {context.task_description}\n"
         )
+        messages = [{"role": "user", "content": prompt}]
+
+        try:
+            response = litellm.completion(
+                model=self.model_id,
+                messages=messages,
+                api_key=api_key,
+                timeout=self.timeout_seconds,
+            )
+            duration_ms = (time.time() - start_time) * 1000.0
+            content = response.choices[0].message.content or ""
+            input_tokens = getattr(response.usage, "prompt_tokens", 0) if response.usage else 0
+            output_tokens = getattr(response.usage, "completion_tokens", 0) if response.usage else 0
+            try:
+                cost = litellm.completion_cost(completion_response=response) or 0.0
+            except Exception:
+                cost = 0.0
+
+            return AgentResult(
+                success=True,
+                agent_id="gemini_executor",
+                task_id=context.task_id,
+                workflow_id=context.workflow_id,
+                summary=content[:500] if len(content) > 500 else content,
+                metrics={
+                    "latency_ms": duration_ms,
+                    "cost": cost,
+                    "provider": "gemini",
+                    "model": self.model_id,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                },
+                metadata={"full_output": content},
+            )
+        except Exception as e:
+            duration_ms = (time.time() - start_time) * 1000.0
+            fail_class, retryable = _classify_error(e)
+            logger.warning("gemini_execution_failed", error=str(e), failure_class=fail_class)
+            return AgentResult(
+                success=False,
+                agent_id="gemini_executor",
+                task_id=context.task_id,
+                workflow_id=context.workflow_id,
+                summary=f"Gemini execution failed ({fail_class}): {e!s}",
+                errors=[str(e)],
+                metrics={
+                    "latency_ms": duration_ms,
+                    "cost": 0.0,
+                    "provider": "gemini",
+                    "model": self.model_id,
+                    "failure_class": fail_class,
+                    "retryable": retryable,
+                },
+            )
+
 
 class NvidiaExecutor(AgentExecutor):
-    """Executes a task using NVIDIA APIs."""
+    """Executes a task using NVIDIA Cloud APIs."""
+
+    def __init__(
+        self,
+        model_id: str = "deepseek-ai/deepseek-coder-33b-instruct",
+        endpoint: str = "https://integrate.api.nvidia.com/v1",
+        timeout_seconds: float = 60.0,
+    ):
+        self.model_id = model_id
+        self.endpoint = endpoint
+        self.timeout_seconds = timeout_seconds
+
+    def health_check(self) -> bool:
+        """Checks if NVIDIA API credentials exist."""
+        return bool(os.environ.get("NVIDIA_API_KEY"))
+
     def execute(self, context: AgentContext) -> AgentResult:
-        logger.info("executing_task_nvidia", task_id=context.task_id)
-        # Mock logic
-        return AgentResult(
-            success=True,
-            agent_id="nvidia_executor",
-            task_id=context.task_id,
-            workflow_id=context.workflow_id,
-            summary="Executed via NVIDIA API.",
-            metrics={"latency_ms": 400, "cost": 0.03}
+        logger.info("executing_task_nvidia", task_id=context.task_id, model=self.model_id)
+
+        if context.dry_run:
+            return AgentResult(
+                success=True,
+                agent_id="nvidia_executor",
+                task_id=context.task_id,
+                workflow_id=context.workflow_id,
+                summary=f"[DRY RUN] Simulated NVIDIA execution ({self.model_id}) for task: {context.task_description}",
+                metrics={
+                    "latency_ms": 0.0,
+                    "cost": 0.0,
+                    "provider": "nvidia",
+                    "model": self.model_id,
+                    "dry_run": True,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                },
+            )
+
+        api_key = os.environ.get("NVIDIA_API_KEY")
+        if not api_key:
+            return AgentResult(
+                success=False,
+                agent_id="nvidia_executor",
+                task_id=context.task_id,
+                workflow_id=context.workflow_id,
+                summary="NVIDIA execution failed: No NVIDIA_API_KEY in environment.",
+                errors=["Missing NVIDIA_API_KEY credentials"],
+                metrics={
+                    "latency_ms": 0.0,
+                    "cost": 0.0,
+                    "provider": "nvidia",
+                    "model": self.model_id,
+                    "failure_class": "missing_credentials",
+                    "retryable": False,
+                },
+            )
+
+        start_time = time.time()
+        prompt = (
+            f"You are executing an autonomous engineering task.\n"
+            f"Stage: {context.current_stage.value}\n"
+            f"Task: {context.task_description}\n"
         )
+        messages = [{"role": "user", "content": prompt}]
+
+        litellm_model = f"openai/{self.model_id}"
+        try:
+            response = litellm.completion(
+                model=litellm_model,
+                messages=messages,
+                api_base=self.endpoint,
+                api_key=api_key,
+                timeout=self.timeout_seconds,
+            )
+            duration_ms = (time.time() - start_time) * 1000.0
+            content = response.choices[0].message.content or ""
+            input_tokens = getattr(response.usage, "prompt_tokens", 0) if response.usage else 0
+            output_tokens = getattr(response.usage, "completion_tokens", 0) if response.usage else 0
+            try:
+                cost = litellm.completion_cost(completion_response=response) or 0.0
+            except Exception:
+                cost = 0.0
+
+            return AgentResult(
+                success=True,
+                agent_id="nvidia_executor",
+                task_id=context.task_id,
+                workflow_id=context.workflow_id,
+                summary=content[:500] if len(content) > 500 else content,
+                metrics={
+                    "latency_ms": duration_ms,
+                    "cost": cost,
+                    "provider": "nvidia",
+                    "model": self.model_id,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                },
+                metadata={"full_output": content},
+            )
+        except Exception as e:
+            duration_ms = (time.time() - start_time) * 1000.0
+            fail_class, retryable = _classify_error(e)
+            logger.warning("nvidia_execution_failed", error=str(e), failure_class=fail_class)
+            return AgentResult(
+                success=False,
+                agent_id="nvidia_executor",
+                task_id=context.task_id,
+                workflow_id=context.workflow_id,
+                summary=f"NVIDIA execution failed ({fail_class}): {e!s}",
+                errors=[str(e)],
+                metrics={
+                    "latency_ms": duration_ms,
+                    "cost": 0.0,
+                    "provider": "nvidia",
+                    "model": self.model_id,
+                    "failure_class": fail_class,
+                    "retryable": retryable,
+                },
+            )
+
 
 class AntigravityExecutor(AgentExecutor):
     """
     Executes a task using the Antigravity agentic runtime.
-    This acts as a clean boundary. If Antigravity is not installed/reachable, 
-    it returns failure or is marked unhealthy, preventing routing.
+    This acts as an explicit boundary. If Antigravity is not reachable/enabled,
+    it reports unavailable rather than pretending to perform work.
     """
+
+    def __init__(self, endpoint: str | None = None, enabled: bool = False):
+        self.endpoint = endpoint
+        self.enabled = enabled or bool(os.environ.get("ANTIGRAVITY_ENABLED", "").lower() in ("true", "1"))
+
+    def health_check(self) -> bool:
+        """Boundary is only healthy if explicitly enabled and accessible."""
+        return self.enabled
+
     def execute(self, context: AgentContext) -> AgentResult:
         logger.info("executing_task_antigravity", task_id=context.task_id)
-        
-        # Integration point: In real system, this would make an API call or spawn an Antigravity subprocess.
-        # For now, it's a boundary stub.
-        
+
+        if not self.health_check():
+            return AgentResult(
+                success=False,
+                agent_id="antigravity_executor",
+                task_id=context.task_id,
+                workflow_id=context.workflow_id,
+                summary="Antigravity boundary execution failed: Antigravity is not enabled or available in this environment.",
+                errors=["Antigravity runtime boundary unavailable"],
+                metrics={
+                    "latency_ms": 0.0,
+                    "cost": 0.0,
+                    "provider": "antigravity",
+                    "failure_class": "provider_unavailable",
+                    "retryable": False,
+                },
+            )
+
+        # Active boundary execution stub if enabled
         return AgentResult(
             success=True,
             agent_id="antigravity_executor",
             task_id=context.task_id,
             workflow_id=context.workflow_id,
-            summary="Executed via Antigravity boundary.",
-            metrics={"latency_ms": 3000, "cost": 0.0}
+            summary=f"Executed via Antigravity runtime boundary for: {context.task_description}",
+            metrics={"latency_ms": 100.0, "cost": 0.0, "provider": "antigravity"},
         )
+
+
+def create_default_executor_registry(config: Any = None) -> ExecutorRegistry:
+    """Builds and registers standard execution backends."""
+    registry = ExecutorRegistry()
+
+    # Local Ollama
+    local_ep = config.providers.ollama.endpoint if (config and hasattr(config, "providers")) else None
+    local_mod = config.providers.ollama.default_model if (config and hasattr(config, "providers")) else None
+    registry.register(
+        "local",
+        LocalModelExecutor(endpoint=local_ep, model_id=local_mod),
+        [
+            AgentCapability.CODING,
+            AgentCapability.REFACTORING,
+            AgentCapability.MULTI_FILE_EDITING,
+        ],
+    )
+
+    # Gemini
+    gem_mod = config.providers.gemini.default_model if (config and hasattr(config, "providers")) else None
+    registry.register(
+        "gemini",
+        GeminiExecutor(model_id=gem_mod),
+        [
+            AgentCapability.CODING,
+            AgentCapability.REASONING,
+            AgentCapability.REFACTORING,
+            AgentCapability.MULTI_FILE_EDITING,
+            AgentCapability.REPO_NAVIGATION,
+        ],
+    )
+
+    # NVIDIA
+    nvid_mod = config.providers.nvidia.default_model if (config and hasattr(config, "providers")) else None
+    nvid_ep = config.providers.nvidia.endpoint if (config and hasattr(config, "providers")) else None
+    registry.register(
+        "nvidia",
+        NvidiaExecutor(model_id=nvid_mod, endpoint=nvid_ep),
+        [
+            AgentCapability.CODING,
+            AgentCapability.REASONING,
+            AgentCapability.REFACTORING,
+            AgentCapability.MULTI_FILE_EDITING,
+        ],
+    )
+
+
+    # Antigravity
+    ag_ep = config.providers.antigravity.endpoint if (config and hasattr(config, "providers")) else None
+    ag_en = config.providers.antigravity.enabled if (config and hasattr(config, "providers")) else False
+    registry.register(
+        "antigravity",
+        AntigravityExecutor(endpoint=ag_ep, enabled=ag_en),
+        [
+            AgentCapability.CODING,
+            AgentCapability.REASONING,
+            AgentCapability.BROWSER,
+            AgentCapability.TERMINAL,
+            AgentCapability.REPO_NAVIGATION,
+            AgentCapability.TESTING,
+            AgentCapability.MULTI_FILE_EDITING,
+        ],
+    )
+
+    return registry
+
