@@ -1,6 +1,8 @@
-import structlog
 import logging
 import sys
+
+import structlog
+
 
 def setup_logging(level: str = "INFO", format_type: str = "json"):
     """Configures structured logging for the application."""

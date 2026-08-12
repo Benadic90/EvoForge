@@ -1,11 +1,13 @@
+
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+
 from .classifier import TaskType
+
 
 class ModelConfig(BaseModel):
     model_id: str
     max_context: int
-    strengths: List[TaskType]
+    strengths: list[TaskType]
     cost_tier: str  # "free", "cheap", "moderate", "expensive"
     reliability_score: float = 1.0  # 0.0 to 1.0
 
@@ -16,8 +18,8 @@ class RateLimit(BaseModel):
 class ProviderConfig(BaseModel):
     name: str
     api_type: str  # "openai", "google", "nvidia", "ollama"
-    base_url: Optional[str] = None
-    models: Dict[str, ModelConfig]
+    base_url: str | None = None
+    models: dict[str, ModelConfig]
     rate_limit: RateLimit
     cost_per_1k_input: float
     cost_per_1k_output: float

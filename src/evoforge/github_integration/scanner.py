@@ -1,12 +1,12 @@
-import os
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
+
 
 class RepositoryScanner:
     def __init__(self, repo_path: str):
         self.repo_path = Path(repo_path)
 
-    def scan(self) -> Dict[str, Any]:
+    def scan(self) -> dict[str, Any]:
         """Performs a basic static scan of the repository."""
         if not self.repo_path.exists():
             return {"error": "Repository path does not exist"}

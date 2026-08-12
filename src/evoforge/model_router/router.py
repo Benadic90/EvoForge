@@ -1,20 +1,22 @@
+from typing import Any
+
 import litellm
 import structlog
-from typing import Optional, Dict, Any
 from pydantic import BaseModel
-from .classifier import TaskType, TaskComplexity
+
+from .classifier import TaskComplexity, TaskType
 from .providers import DEFAULT_PROVIDERS, ProviderConfig
 
 logger = structlog.get_logger(__name__)
 
 class LLMRequest(BaseModel):
     prompt: str
-    system_prompt: Optional[str] = None
+    system_prompt: str | None = None
     task_type: TaskType
     complexity: TaskComplexity
     max_tokens: int = 1000
     temperature: float = 0.2
-    preferred_provider: Optional[str] = None
+    preferred_provider: str | None = None
     require_json: bool = False
 
 class LLMResponse(BaseModel):
@@ -27,7 +29,7 @@ class LLMResponse(BaseModel):
     latency_ms: int
 
 class ModelRouter:
-    def __init__(self, providers: Dict[str, ProviderConfig] = DEFAULT_PROVIDERS):
+    def __init__(self, providers: dict[str, ProviderConfig] = DEFAULT_PROVIDERS):
         self.providers = providers
         # Configure litellm logging if needed
         litellm.suppress_debug_info = True
@@ -63,7 +65,7 @@ class ModelRouter:
             messages.append({"role": "system", "content": request.system_prompt})
         messages.append({"role": "user", "content": request.prompt})
 
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "model": model_id,
             "messages": messages,
             "temperature": request.temperature,

@@ -1,6 +1,7 @@
 from enum import Enum
+
 from pydantic import BaseModel
-from typing import List, Optional
+
 
 class PermissionLevel(Enum):
     READ_ONLY = "read_only"
@@ -11,8 +12,8 @@ class PermissionLevel(Enum):
 class RepositoryPolicy(BaseModel):
     repo_name: str
     level: PermissionLevel
-    allowed_branches: List[str] = ["*"]
-    forbidden_files: List[str] = [".env", "secrets.json", "credentials.yml"]
+    allowed_branches: list[str] = ["*"]
+    forbidden_files: list[str] = [".env", "secrets.json", "credentials.yml"]
     max_budget_usd: float = 1.0
 
 # Example global default policy

@@ -1,5 +1,5 @@
-import typer
 import structlog
+import typer
 
 # Initialize logger
 logger = structlog.get_logger()

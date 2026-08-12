@@ -1,11 +1,11 @@
-import uvicorn
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from typing import Dict, Any, List
-import sqlite3
 import json
 import logging
 from contextlib import asynccontextmanager
+from typing import Any
+
+import uvicorn
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from evoforge.memory.database import Database
 from evoforge.utils.config import load_config
@@ -37,7 +37,7 @@ def get_db_connection():
     return db.get_connection()
 
 @app.get("/api/status")
-def get_status() -> Dict[str, Any]:
+def get_status() -> dict[str, Any]:
     """Returns the current system status and active workflows."""
     conn = get_db_connection()
     try:
@@ -54,7 +54,7 @@ def get_status() -> Dict[str, Any]:
         conn.close()
 
 @app.get("/api/agents/metrics")
-def get_agent_metrics() -> Dict[str, Any]:
+def get_agent_metrics() -> dict[str, Any]:
     """Retrieves agent skill levels and benchmarks."""
     conn = get_db_connection()
     try:
@@ -87,7 +87,7 @@ def get_agent_metrics() -> Dict[str, Any]:
         conn.close()
 
 @app.get("/api/graph/knowledge")
-def get_knowledge_graph() -> Dict[str, Any]:
+def get_knowledge_graph() -> dict[str, Any]:
     """Computes a node/edge dataset representing agents and shared knowledge."""
     conn = get_db_connection()
     try:

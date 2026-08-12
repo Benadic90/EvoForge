@@ -1,13 +1,14 @@
-import pytest
 from unittest.mock import MagicMock
-from evoforge.agents.advanced.planner import PlannerAgent
+
 from evoforge.agents.advanced.architect import ArchitectAgent
+from evoforge.agents.advanced.conflict_resolver import ConflictResolver
 from evoforge.agents.advanced.devops import DevOpsAgent
 from evoforge.agents.advanced.documentation import DocumentationAgent
+from evoforge.agents.advanced.planner import PlannerAgent
 from evoforge.agents.advanced.research import ResearchAgent
-from evoforge.agents.advanced.conflict_resolver import ConflictResolver
-from evoforge.model_router.router import ModelRouter, LLMResponse
 from evoforge.agents.registry import ToolRegistry
+from evoforge.model_router.router import LLMResponse, ModelRouter
+
 
 def test_advanced_agents_init():
     router = MagicMock(spec=ModelRouter)

@@ -1,11 +1,12 @@
-import pytest
 from unittest.mock import MagicMock
+
 from evoforge.agents.core.developer import DeveloperAgent
 from evoforge.agents.core.qa import QAAgent
 from evoforge.agents.core.reviewer import ReviewerAgent
 from evoforge.agents.core.security import SecurityAgent
-from evoforge.model_router.router import ModelRouter, LLMResponse
 from evoforge.agents.registry import ToolRegistry
+from evoforge.model_router.router import LLMResponse, ModelRouter
+
 
 def test_core_agents_init():
     router = MagicMock(spec=ModelRouter)

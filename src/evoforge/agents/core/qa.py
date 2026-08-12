@@ -1,7 +1,8 @@
 from evoforge.agents.base import BaseAgent
-from evoforge.model_router.router import ModelRouter
 from evoforge.agents.registry import ToolRegistry
-from evoforge.model_router.classifier import TaskType, TaskComplexity
+from evoforge.model_router.classifier import TaskComplexity, TaskType
+from evoforge.model_router.router import ModelRouter
+
 
 class QAAgent(BaseAgent):
     def __init__(self, model_router: ModelRouter, tools: ToolRegistry):

@@ -1,6 +1,8 @@
-import structlog
-from typing import Dict, Any, List, Callable
+from collections.abc import Callable
 from inspect import signature
+from typing import Any
+
+import structlog
 
 logger = structlog.get_logger(__name__)
 
@@ -16,11 +18,11 @@ class Tool:
             return self.func(**kwargs)
         except Exception as e:
             logger.error("tool_execution_failed", tool=self.name, error=str(e))
-            return f"Error executing {self.name}: {str(e)}"
+            return f"Error executing {self.name}: {e!s}"
 
 class ToolRegistry:
     def __init__(self):
-        self.tools: Dict[str, Tool] = {}
+        self.tools: dict[str, Tool] = {}
 
     def register(self, name: str, description: str, func: Callable):
         self.tools[name] = Tool(name, description, func)
@@ -31,5 +33,5 @@ class ToolRegistry:
             raise ValueError(f"Tool {name} not found in registry.")
         return self.tools[name]
 
-    def list_tools(self) -> List[Dict[str, str]]:
+    def list_tools(self) -> list[dict[str, str]]:
         return [{"name": t.name, "description": t.description} for t in self.tools.values()]

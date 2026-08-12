@@ -1,5 +1,6 @@
+
 import structlog
-from typing import Optional
+
 from .client import GitHubClient
 
 logger = structlog.get_logger(__name__)
@@ -8,9 +9,21 @@ class PullRequestManager:
     def __init__(self, github_client: GitHubClient):
         self.client = github_client
 
-    def create_pr(self, repo_full_name: str, title: str, body: str, head_branch: str, base_branch: str = "main") -> str:
-        """Creates a Pull Request and returns its HTML URL."""
+    def create_pr(self, repo_full_name: str, title: str, body: str, head_branch: str, base_branch: str = "main", dry_run: bool = False) -> str:
+        """Creates a Pull Request and returns its HTML URL. Idempotent."""
+        if dry_run:
+            logger.info("dry_run_create_pr", repo=repo_full_name, head=head_branch)
+            return "dry-run-pr-url"
+            
         repo = self.client.get_repo(repo_full_name)
+        
+        # Check if PR already exists
+        pulls = repo.get_pulls(state='open', head=f"{repo.owner.login}:{head_branch}")
+        if pulls.totalCount > 0:
+            pr = pulls[0]
+            logger.info("pull_request_already_exists", url=pr.html_url)
+            return pr.html_url
+            
         try:
             pr = repo.create_pull(
                 title=title,

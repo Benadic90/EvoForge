@@ -1,9 +1,12 @@
-import uuid
-import structlog
 import json
-from typing import List, Dict, Callable, Any
-from pydantic import BaseModel
+import uuid
+from collections.abc import Callable
 from datetime import datetime
+from typing import Any
+
+import structlog
+from pydantic import BaseModel
+
 from evoforge.memory.database import Database
 from evoforge.memory.obsidian import ObsidianManager
 
@@ -21,7 +24,7 @@ class BenchmarkTask(BaseModel):
 class BenchmarkSuite(BaseModel):
     name: str
     agent_name: str
-    tasks: List[BenchmarkTask]
+    tasks: list[BenchmarkTask]
     baseline_score: float = 0.0
 
 class BenchmarkResult(BaseModel):
@@ -30,13 +33,13 @@ class BenchmarkResult(BaseModel):
     score: float
     improvement_pct: float
     success: bool
-    details: Dict[str, Any]
+    details: dict[str, Any]
 
 class BenchmarkRunner:
     def __init__(self, db: Database, obsidian: ObsidianManager):
         self.db = db
         self.obsidian = obsidian
-        self._evaluators: Dict[str, Callable] = {}
+        self._evaluators: dict[str, Callable] = {}
         
     def register_evaluator(self, name: str, func: Callable):
         self._evaluators[name] = func
@@ -59,7 +62,7 @@ class BenchmarkRunner:
                     result = agent_instance.review_changes(task.description)
                 elif hasattr(agent_instance, 'think_and_act'):
                     # Generic fallback, using mock Enums for task type
-                    from evoforge.model_router.classifier import TaskType, TaskComplexity
+                    from evoforge.model_router.classifier import TaskComplexity, TaskType
                     result = agent_instance.think_and_act(task.description, TaskType.CODE_GENERATION, TaskComplexity.MEDIUM)
                 else:
                     raise NotImplementedError(f"Agent {suite.agent_name} lacks a standard execution method for benchmarking.")

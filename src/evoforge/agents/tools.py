@@ -1,11 +1,11 @@
-import os
 import subprocess
-import structlog
-from typing import Dict, Any
 from pathlib import Path
 
-from evoforge.policy_engine.validator import ActionValidator
+import structlog
+
 from evoforge.github_integration.repository import LocalRepository
+from evoforge.policy_engine.validator import ActionValidator
+
 from .registry import ToolRegistry
 
 logger = structlog.get_logger(__name__)
@@ -24,7 +24,7 @@ def build_tool_registry(workspace: str, validator: ActionValidator, repo: LocalR
             with open(full_path, "r", encoding="utf-8") as f:
                 return f.read()
         except Exception as e:
-            return f"Error reading file: {str(e)}"
+            return f"Error reading file: {e!s}"
 
     def write_file(file_path: str, content: str) -> str:
         """Writes content to a file in the repository."""
@@ -38,7 +38,7 @@ def build_tool_registry(workspace: str, validator: ActionValidator, repo: LocalR
                 f.write(content)
             return "File successfully written."
         except Exception as e:
-            return f"Error writing file: {str(e)}"
+            return f"Error writing file: {e!s}"
 
     def execute_command(command: str) -> str:
         """Executes a shell command within the repository context."""
@@ -58,7 +58,7 @@ def build_tool_registry(workspace: str, validator: ActionValidator, repo: LocalR
         except subprocess.TimeoutExpired:
             return "Error: Command execution timed out after 30 seconds."
         except Exception as e:
-            return f"Error executing command: {str(e)}"
+            return f"Error executing command: {e!s}"
 
     def git_commit_and_push(message: str, branch_name: str) -> str:
         """Commits changes and pushes to a specific branch."""
@@ -70,7 +70,7 @@ def build_tool_registry(workspace: str, validator: ActionValidator, repo: LocalR
             success = repo.commit_and_push(message, branch_name)
             return "Changes successfully committed and pushed." if success else "No changes to commit."
         except Exception as e:
-            return f"Error with Git operation: {str(e)}"
+            return f"Error with Git operation: {e!s}"
 
     registry.register("read_file", "Read a file's content", read_file)
     registry.register("write_file", "Write content to a file", write_file)

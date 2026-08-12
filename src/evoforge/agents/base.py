@@ -1,10 +1,12 @@
-import structlog
-from typing import Dict, Any, List, Optional
 import json
 
-from evoforge.model_router.router import ModelRouter, LLMRequest
-from evoforge.model_router.classifier import TaskType, TaskComplexity
+import structlog
+
+from evoforge.memory.events import emitter
+from evoforge.model_router.classifier import TaskComplexity, TaskType
 from evoforge.model_router.fallback import FallbackManager
+from evoforge.model_router.router import LLMRequest, ModelRouter
+
 from .registry import ToolRegistry
 
 logger = structlog.get_logger(__name__)
@@ -17,7 +19,7 @@ class BaseAgent:
         self.fallback_manager = FallbackManager(self.router)
         self.tools = tools
         self.skill_profile = skill_profile
-        self.memory: List[Dict[str, str]] = []
+        self.memory: list[dict[str, str]] = []
 
     def _get_system_prompt(self) -> str:
         """Generates the system prompt including tool descriptions and skills."""
@@ -37,6 +39,7 @@ class BaseAgent:
     def think_and_act(self, task_description: str, task_type: TaskType, complexity: TaskComplexity) -> str:
         """Core loop for an agent to process a task, use tools, and return a final answer."""
         self.memory.append({"role": "user", "content": task_description})
+        emitter.emit("agent.started", agent_id=self.name, task_type=task_type.value)
         
         # Max steps to prevent infinite loops
         max_steps = 10
@@ -66,19 +69,22 @@ class BaseAgent:
                         tool_name = tool_call["tool"]
                         kwargs = tool_call.get("kwargs", {})
                         
-                        logger.info("agent_using_tool", agent=self.name, tool=tool_name)
+                        emitter.emit("tool.started", agent_id=self.name, tool=tool_name)
                         tool_result = self.tools.get_tool(tool_name).execute(**kwargs)
+                        emitter.emit("tool.completed", agent_id=self.name, tool=tool_name, result=str(tool_result)[:100])
                         
                         self.memory.append({"role": "system", "content": f"Tool '{tool_name}' returned: {tool_result}"})
                     except Exception as e:
-                        logger.error("tool_parsing_failed", error=str(e))
-                        self.memory.append({"role": "system", "content": f"Failed to parse tool call: {str(e)}"})
+                        emitter.emit("tool.failed", agent_id=self.name, error=str(e))
+                        self.memory.append({"role": "system", "content": f"Failed to parse tool call: {e!s}"})
                 else:
                     # No tool called, we assume this is the final answer
+                    emitter.emit("agent.completed", agent_id=self.name)
                     return content
                     
             except Exception as e:
-                logger.error("agent_execution_failed", error=str(e))
-                return f"Agent failed: {str(e)}"
+                emitter.emit("agent.failed", agent_id=self.name, error=str(e))
+                return f"Agent failed: {e!s}"
                 
+        emitter.emit("agent.failed", agent_id=self.name, error="Exceeded maximum steps.")
         return "Agent failed: Exceeded maximum steps."

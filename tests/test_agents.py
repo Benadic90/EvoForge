@@ -1,13 +1,13 @@
-import pytest
-from unittest.mock import MagicMock
-import tempfile
 import os
+import tempfile
+from unittest.mock import MagicMock
 
-from evoforge.agents.registry import ToolRegistry, Tool
+from evoforge.agents.registry import ToolRegistry
 from evoforge.agents.tools import build_tool_registry
-from evoforge.policy_engine.permissions import RepositoryPolicy, PermissionLevel
-from evoforge.policy_engine.validator import ActionValidator
 from evoforge.model_router.cost_tracker import CostTracker
+from evoforge.policy_engine.permissions import PermissionLevel, RepositoryPolicy
+from evoforge.policy_engine.validator import ActionValidator
+
 
 def test_tool_registry():
     registry = ToolRegistry()

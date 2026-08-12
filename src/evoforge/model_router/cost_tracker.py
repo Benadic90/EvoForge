@@ -1,6 +1,5 @@
+
 import structlog
-from pydantic import BaseModel
-from typing import Dict
 
 logger = structlog.get_logger(__name__)
 
@@ -8,9 +7,9 @@ class CostTracker:
     def __init__(self, daily_budget_usd: float = 5.00):
         self.daily_budget_usd = daily_budget_usd
         self.spent_today_usd = 0.0
-        self.per_provider_spent: Dict[str, float] = {}
-        self.per_agent_spent: Dict[str, float] = {}
-        self.per_project_spent: Dict[str, float] = {}
+        self.per_provider_spent: dict[str, float] = {}
+        self.per_agent_spent: dict[str, float] = {}
+        self.per_project_spent: dict[str, float] = {}
 
     def record_cost(self, cost_usd: float, provider: str, agent: str = "unknown", project: str = "unknown"):
         """Records an API cost against the daily budget."""

@@ -1,13 +1,13 @@
 import os
+
 import structlog
 from github import Github
 from github.GithubException import GithubException
-from typing import List, Optional
 
 logger = structlog.get_logger(__name__)
 
 class GitHubClient:
-    def __init__(self, token: Optional[str] = None):
+    def __init__(self, token: str | None = None):
         self.token = token or os.environ.get("GITHUB_TOKEN")
         if not self.token:
             logger.warning("github_token_missing")
@@ -15,7 +15,7 @@ class GitHubClient:
         else:
             self.client = Github(self.token)
             
-    def get_user_repositories(self) -> List[str]:
+    def get_user_repositories(self) -> list[str]:
         """Fetch all repositories owned by the authenticated user."""
         try:
             user = self.client.get_user()

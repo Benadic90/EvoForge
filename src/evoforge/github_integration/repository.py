@@ -1,8 +1,7 @@
-import os
-import structlog
-from git import Repo, GitCommandError
 from pathlib import Path
-from typing import List, Optional
+
+import structlog
+from git import GitCommandError, Repo
 
 logger = structlog.get_logger(__name__)
 
@@ -12,7 +11,7 @@ class LocalRepository:
         self.repo_name = repo_full_name.replace("/", "_")
         self.repo_path = self.workspace_dir / self.repo_name
         self.clone_url = clone_url
-        self.repo: Optional[Repo] = None
+        self.repo: Repo | None = None
 
     def clone_or_update(self):
         """Clones the repository if it doesn't exist, otherwise pulls latest."""
@@ -34,8 +33,12 @@ class LocalRepository:
             logger.error("git_operation_failed", error=str(e))
             raise
 
-    def create_branch(self, branch_name: str, base_branch: str = "main"):
+    def create_branch(self, branch_name: str, base_branch: str = "main", dry_run: bool = False):
         """Creates and checks out a new branch from a base branch."""
+        if dry_run:
+            logger.info("dry_run_create_branch", branch=branch_name)
+            return
+            
         if not self.repo:
             raise ValueError("Repository not initialized. Call clone_or_update() first.")
             
@@ -44,6 +47,12 @@ class LocalRepository:
             self.repo.git.checkout(base_branch)
             self.repo.remotes.origin.pull(base_branch)
             
+            # Check if branch exists
+            if branch_name in self.repo.heads:
+                logger.info("branch_already_exists", branch=branch_name)
+                self.repo.heads[branch_name].checkout()
+                return
+
             # Create and checkout new branch
             new_branch = self.repo.create_head(branch_name)
             new_branch.checkout()
@@ -52,8 +61,12 @@ class LocalRepository:
             logger.error("create_branch_failed", branch=branch_name, error=str(e))
             raise
 
-    def commit_and_push(self, message: str, branch_name: str):
+    def commit_and_push(self, message: str, branch_name: str, dry_run: bool = False):
         """Commits all tracked and untracked changes and pushes to remote."""
+        if dry_run:
+            logger.info("dry_run_commit_and_push", message=message, branch=branch_name)
+            return True
+            
         if not self.repo:
             raise ValueError("Repository not initialized.")
             

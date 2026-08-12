@@ -1,10 +1,10 @@
-import pytest
-import tempfile
 import os
-from pathlib import Path
+import tempfile
+
 from evoforge.memory.database import Database
-from evoforge.memory.obsidian import ObsidianManager
 from evoforge.memory.manager import MemoryManager
+from evoforge.memory.obsidian import ObsidianManager
+
 
 def test_obsidian_manager_init():
     with tempfile.TemporaryDirectory() as temp_dir:

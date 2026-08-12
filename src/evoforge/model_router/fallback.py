@@ -1,8 +1,10 @@
-import structlog
 import time
-from typing import Callable, Any
-from .router import LLMRequest, LLMResponse, ModelRouter
+from collections.abc import Callable
+
 import litellm
+import structlog
+
+from .router import LLMRequest, LLMResponse, ModelRouter
 
 logger = structlog.get_logger(__name__)
 

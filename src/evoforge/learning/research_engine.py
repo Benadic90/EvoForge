@@ -1,12 +1,13 @@
-import structlog
-import uuid
 import json
+import uuid
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional
+
+import structlog
 from pydantic import BaseModel
+
+from evoforge.agents.advanced.research import ResearchAgent
 from evoforge.memory.database import Database
 from evoforge.memory.obsidian import ObsidianManager
-from evoforge.agents.advanced.research import ResearchAgent
 
 logger = structlog.get_logger(__name__)
 
@@ -20,14 +21,14 @@ class ResearchTopic(BaseModel):
 class ResearchResult(BaseModel):
     topic: ResearchTopic
     findings: str
-    sources: List[str]
+    sources: list[str]
     success: bool
 
 class ResearchScheduler:
     def __init__(self, db: Database):
         self.db = db
         
-    def get_due_research(self) -> List[ResearchTopic]:
+    def get_due_research(self) -> list[ResearchTopic]:
         """Returns research topics that are scheduled and pending."""
         conn = self.db.get_connection()
         topics = []
@@ -69,7 +70,7 @@ class ResearchScheduler:
         finally:
             conn.close()
 
-    def mark_completed(self, topic: str, findings: str, sources: List[str]):
+    def mark_completed(self, topic: str, findings: str, sources: list[str]):
         conn = self.db.get_connection()
         try:
             cursor = conn.cursor()

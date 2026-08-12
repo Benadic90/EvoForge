@@ -1,15 +1,17 @@
+from typing import Any
+
 import structlog
-from typing import Dict, Any
-from evoforge.learning.skill_registry import SkillRegistry, Skill
-from evoforge.learning.skill_versioner import SkillVersioner
-from evoforge.learning.evolution_proposer import EvolutionProposal
+
 from evoforge.learning.evaluator import EvaluationResult
+from evoforge.learning.evolution_proposer import EvolutionProposal
+from evoforge.learning.skill_registry import Skill, SkillRegistry
+from evoforge.learning.skill_versioner import SkillVersioner
 from evoforge.memory.obsidian import ObsidianManager
 
 logger = structlog.get_logger(__name__)
 
 class SkillUpdater:
-    def __init__(self, registry: SkillRegistry, versioner: SkillVersioner, obsidian: ObsidianManager, agents_roster: Dict[str, Any]):
+    def __init__(self, registry: SkillRegistry, versioner: SkillVersioner, obsidian: ObsidianManager, agents_roster: dict[str, Any]):
         self.registry = registry
         self.versioner = versioner
         self.obsidian = obsidian
@@ -62,4 +64,3 @@ class SkillUpdater:
         """Hook for notifying other agents of the new skill."""
         logger.debug("notifying_dependent_agents", source=source_agent, skill=skill.name)
         # This will be integrated with the KnowledgeSharing module in Phase L11
-        pass

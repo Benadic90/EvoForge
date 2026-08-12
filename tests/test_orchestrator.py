@@ -1,17 +1,25 @@
-import pytest
 from unittest.mock import MagicMock
-from evoforge.orchestrator.workflows import WorkflowDefinition, WorkflowTask, TaskPriority, WorkflowState
-from evoforge.orchestrator.engine import OrchestratorEngine
+
+from evoforge.memory.events import emitter
 from evoforge.memory.manager import MemoryManager
+from evoforge.memory.state import WorkflowStage
+from evoforge.orchestrator.engine import OrchestratorEngine
+from evoforge.orchestrator.workflows import TaskPriority, WorkflowDefinition, WorkflowTask
+
 
 def test_workflow_execution():
+    emitter.store = None # Disable persistent event store for this test
     mock_memory = MagicMock(spec=MemoryManager)
+    mock_memory.db = MagicMock()
     
     mock_dev_agent = MagicMock()
     mock_dev_agent.implement_feature.return_value = "Code written."
     
     agents = {"developer": mock_dev_agent}
     engine = OrchestratorEngine(mock_memory, agents)
+    
+    # Mock the lease acquisition to succeed by returning the engine's worker_id
+    mock_memory.db.fetchall.return_value = [{"worker_id": engine.worker_id}]
     
     task1 = WorkflowTask(
         id="t1",
@@ -37,9 +45,9 @@ def test_workflow_execution():
     
     engine.execute_workflow(wf)
     
-    assert wf.state == WorkflowState.COMPLETED
-    assert wf.tasks[0].status == WorkflowState.COMPLETED # Which is task2
-    assert wf.tasks[1].status == WorkflowState.COMPLETED # Which is task1
+    assert wf.state == WorkflowStage.COMPLETE
+    assert wf.tasks[0].status == WorkflowStage.COMPLETE # Which is task2
+    assert wf.tasks[1].status == WorkflowStage.COMPLETE # Which is task1
     
     # Check prioritization: task1 (HIGH) should be executed before task2 (LOW)
     # The prioritizer sorts descending, so task1 is index 0 in sorted list

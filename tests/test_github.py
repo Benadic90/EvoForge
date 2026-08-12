@@ -1,9 +1,10 @@
-import pytest
-from unittest.mock import patch, MagicMock
+import os
+import tempfile
+from unittest.mock import patch
+
 from evoforge.github_integration.client import GitHubClient
 from evoforge.github_integration.scanner import RepositoryScanner
-import tempfile
-import os
+
 
 @patch('evoforge.github_integration.client.Github')
 def test_github_client_init(mock_github):

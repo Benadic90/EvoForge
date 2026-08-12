@@ -1,19 +1,21 @@
 import json
+from typing import Any
+
 import structlog
-from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
-from evoforge.memory.database import Database
+
 from evoforge.learning.skill_registry import Skill, SkillRegistry
+from evoforge.memory.database import Database
 
 logger = structlog.get_logger(__name__)
 
 class SkillVersion(BaseModel):
     version: int
     system_prompt_patch: str
-    techniques: List[str]
-    tools: List[str]
-    patterns: List[str]
-    anti_patterns: List[str]
+    techniques: list[str]
+    tools: list[str]
+    patterns: list[str]
+    anti_patterns: list[str]
     benchmark_score: float
 
 class SkillVersioner:
@@ -21,7 +23,7 @@ class SkillVersioner:
         self.db = db
         self.registry = registry
 
-    def create_version(self, agent_name: str, skill: Skill, changes: Dict[str, Any], benchmark_score: float = 0.0) -> Skill:
+    def create_version(self, agent_name: str, skill: Skill, changes: dict[str, Any], benchmark_score: float = 0.0) -> Skill:
         """Creates a new version of a skill with applied changes."""
         # 1. First ensure the base skill exists to get its internal ID
         # For simplicity, we query the DB to get the current skill's internal ID
@@ -76,7 +78,7 @@ class SkillVersioner:
         finally:
             conn.close()
 
-    def get_history(self, agent_name: str, skill_name: str) -> List[SkillVersion]:
+    def get_history(self, agent_name: str, skill_name: str) -> list[SkillVersion]:
         """Retrieves the version history for a specific skill."""
         conn = self.db.get_connection()
         history = []

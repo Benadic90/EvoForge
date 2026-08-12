@@ -1,8 +1,12 @@
-import structlog
-from typing import Dict, Any, Optional
 from datetime import datetime
+
+import structlog
+
 from .database import Database
+from .events import SQLiteEventStore, emitter
+from .idempotency import IdempotencyManager
 from .obsidian import ObsidianManager
+from .state import WorkflowState
 
 logger = structlog.get_logger(__name__)
 
@@ -10,11 +14,13 @@ class MemoryManager:
     def __init__(self, db: Database, obsidian: ObsidianManager):
         self.db = db
         self.obsidian = obsidian
+        self.idempotency = IdempotencyManager(db)
 
     def init_memory_systems(self):
         """Initializes both SQLite and Obsidian systems."""
         self.obsidian.init_vault()
-        # Note: SQLite initializes itself automatically in Database.__init__
+        # Initialize the global event store now that we have a database
+        emitter.store = SQLiteEventStore(self.db)
         logger.info("memory_systems_initialized")
 
     def register_project(self, repo_name: str, url: str, tech_stack: str):
@@ -41,21 +47,27 @@ class MemoryManager:
         self.obsidian.write_daily_note(today, summary_md)
         logger.info("daily_summary_logged", date=today)
 
-    def record_workflow_checkpoint(self, workflow_id: str, state: str, context: Dict[str, Any]):
+    def record_workflow_checkpoint(self, workflow_state: WorkflowState):
         """Records a hard state checkpoint in SQLite."""
         try:
+            state_str = workflow_state.current_stage.value
+            context_dict = workflow_state.model_dump()
+            
             conn = self.db.get_connection()
             try:
-                import json
+                # Ensure date objects are serialized properly
+                # We use model_dump_json for proper datetimes
+                context_json = workflow_state.model_dump_json()
+                
                 cursor = conn.cursor()
                 cursor.execute(
-                    "UPDATE workflows SET state = ?, context = ? WHERE id = ?",
-                    (state, json.dumps(context), workflow_id)
+                    "UPDATE workflows SET status = ?, state_snapshot = ? WHERE id = ?",
+                    (state_str, context_json, workflow_state.workflow_id)
                 )
                 conn.commit()
-                logger.debug("checkpoint_saved", workflow_id=workflow_id, state=state)
+                logger.debug("checkpoint_saved", workflow_id=workflow_state.workflow_id, state=state_str)
             finally:
                 conn.close()
         except Exception as e:
-            logger.error("checkpoint_save_failed", workflow_id=workflow_id, error=str(e))
+            logger.error("checkpoint_save_failed", workflow_id=workflow_state.workflow_id, error=str(e))
             raise

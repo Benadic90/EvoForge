@@ -1,9 +1,9 @@
-import pytest
-from evoforge.policy_engine.permissions import RepositoryPolicy, PermissionLevel, DEFAULT_POLICY
-from evoforge.policy_engine.shell_allowlist import ShellAllowlist
-from evoforge.policy_engine.secret_detector import SecretDetector
-from evoforge.policy_engine.validator import ActionValidator
 from evoforge.model_router.cost_tracker import CostTracker
+from evoforge.policy_engine.permissions import PermissionLevel, RepositoryPolicy
+from evoforge.policy_engine.secret_detector import SecretDetector
+from evoforge.policy_engine.shell_allowlist import ShellAllowlist
+from evoforge.policy_engine.validator import ActionValidator
+
 
 def test_shell_allowlist():
     allowlist = ShellAllowlist()

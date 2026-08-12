@@ -1,7 +1,7 @@
+
 import structlog
-from typing import Dict, List, Set
+
 from evoforge.memory.database import Database
-from evoforge.learning.source_verifier import VerificationStatus
 
 logger = structlog.get_logger(__name__)
 
@@ -9,9 +9,9 @@ class KnowledgeRegistry:
     def __init__(self, db: Database):
         self.db = db
         # Mapping of agent_name -> list of subscribed domains
-        self.subscriptions: Dict[str, Set[str]] = {}
+        self.subscriptions: dict[str, set[str]] = {}
 
-    def subscribe(self, agent_name: str, domains: List[str]):
+    def subscribe(self, agent_name: str, domains: list[str]):
         """Subscribes an agent to specific knowledge domains."""
         if agent_name not in self.subscriptions:
             self.subscriptions[agent_name] = set()
@@ -22,7 +22,6 @@ class KnowledgeRegistry:
         """Notifies the registry that a knowledge item has been validated by an agent."""
         logger.info("knowledge_published", knowledge_id=knowledge_id, source=source_agent)
         # Propagation happens asynchronously or on-demand
-        pass
 
     def propagate(self):
         """Scans for VERIFIED knowledge and assigns it to subscribed agents."""
@@ -62,7 +61,7 @@ class KnowledgeRegistry:
         finally:
             conn.close()
 
-    def get_shared_knowledge(self, agent_name: str) -> List[Dict]:
+    def get_shared_knowledge(self, agent_name: str) -> list[dict]:
         """Retrieves all verified knowledge items applicable to the given agent."""
         conn = self.db.get_connection()
         results = []

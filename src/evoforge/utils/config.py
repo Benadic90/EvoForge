@@ -1,7 +1,9 @@
-import yaml
-from pathlib import Path
-from pydantic import BaseModel
 import os
+from pathlib import Path
+
+import yaml
+from pydantic import BaseModel
+
 
 class GlobalConfig(BaseModel):
     max_daily_api_cost_usd: float = 5.00

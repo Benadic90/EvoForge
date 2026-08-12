@@ -1,5 +1,7 @@
+from typing import Any
+
 import structlog
-from typing import Dict, Any, List
+
 from evoforge.memory.database import Database
 
 logger = structlog.get_logger(__name__)
@@ -8,7 +10,7 @@ class PerformanceMonitor:
     def __init__(self, db: Database):
         self.db = db
         
-    def record_metric(self, name: str, value: float, metadata: Dict[str, Any] = None):
+    def record_metric(self, name: str, value: float, metadata: dict[str, Any] = None):
         """Records a performance metric into the SQLite metrics table."""
         try:
             conn = self.db.get_connection()

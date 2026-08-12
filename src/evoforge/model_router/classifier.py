@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class TaskComplexity(Enum):
     TRIVIAL = "trivial"      # Classification, simple formatting
     LOW = "low"              # Summarization, documentation, simple code edits

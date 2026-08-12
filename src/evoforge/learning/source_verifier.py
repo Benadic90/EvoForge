@@ -1,10 +1,10 @@
-import structlog
-from enum import Enum
-from typing import List, Dict, Optional, Any
-from pydantic import BaseModel
-from datetime import datetime
-import uuid
 import json
+import uuid
+from enum import Enum
+
+import structlog
+from pydantic import BaseModel
+
 from evoforge.memory.database import Database
 from evoforge.memory.obsidian import ObsidianManager
 
@@ -35,8 +35,8 @@ class KnowledgeItem(BaseModel):
     source: str
     source_type: SourceType
     source_url: str
-    publication_date: Optional[str] = None
-    applicable_agents: List[str] = []
+    publication_date: str | None = None
+    applicable_agents: list[str] = []
     
 class VerificationResult(BaseModel):
     item_id: str

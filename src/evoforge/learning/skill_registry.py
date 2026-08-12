@@ -1,9 +1,9 @@
-import structlog
-import uuid
-from typing import List, Dict, Optional, Any
-from pydantic import BaseModel
-from datetime import datetime
 import json
+import uuid
+
+import structlog
+from pydantic import BaseModel
+
 from evoforge.memory.database import Database
 from evoforge.memory.obsidian import ObsidianManager
 
@@ -14,17 +14,17 @@ class Skill(BaseModel):
     version: int = 1
     confidence: float = 0.5
     capability_level: str = "beginner"
-    techniques: List[str] = []
-    tools: List[str] = []
-    patterns: List[str] = []
-    anti_patterns: List[str] = []
-    last_verified: Optional[str] = None
+    techniques: list[str] = []
+    tools: list[str] = []
+    patterns: list[str] = []
+    anti_patterns: list[str] = []
+    last_verified: str | None = None
     freshness: str = "unknown"
-    sources: List[str] = []
+    sources: list[str] = []
 
 class SkillProfile(BaseModel):
     agent_name: str
-    skills: List[Skill] = []
+    skills: list[Skill] = []
     
     def render_skills_context(self) -> str:
         if not self.skills:

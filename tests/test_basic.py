@@ -1,8 +1,9 @@
-import pytest
-import tempfile
 import os
-from evoforge.utils.config import load_config
+import tempfile
+
 from evoforge.memory.database import Database
+from evoforge.utils.config import load_config
+
 
 def test_config_defaults():
     config = load_config("nonexistent_path.yaml")

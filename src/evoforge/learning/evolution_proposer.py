@@ -1,6 +1,8 @@
+from typing import Any
+
 import structlog
-from typing import Dict, Any, List
 from pydantic import BaseModel
+
 from evoforge.evolution.agent import EvolutionAgent
 from evoforge.github_integration.repository import LocalRepository
 
@@ -10,7 +12,7 @@ class EvolutionProposal(BaseModel):
     agent_name: str
     skill_name: str
     current_version: int
-    proposed_changes: Dict[str, Any]
+    proposed_changes: dict[str, Any]
     evidence: str
     expected_improvement: str
 

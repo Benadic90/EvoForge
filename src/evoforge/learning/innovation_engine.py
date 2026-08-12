@@ -1,7 +1,9 @@
+from typing import Any
+
 import structlog
-from typing import Dict, Any, List
-from evoforge.learning.sandbox import SandboxEnvironment, ExperimentRunner
+
 from evoforge.evolution.agent import EvolutionAgent
+from evoforge.learning.sandbox import ExperimentRunner
 
 logger = structlog.get_logger(__name__)
 
@@ -40,14 +42,14 @@ class InnovationWorkflow:
             
         logger.info("innovation_cycle_completed", domain=domain)
 
-    def _generate_candidates(self, domain: str, limitation: str) -> List[Dict[str, Any]]:
+    def _generate_candidates(self, domain: str, limitation: str) -> list[dict[str, Any]]:
         """Uses the EvolutionAgent to generate alternative approaches."""
         # Mocked for MVP
         return [
             {"name": f"Alternative Approach 1 for {limitation}", "code": "def fast_cache(): pass"}
         ]
         
-    def _security_review(self, candidate: Dict[str, Any]) -> bool:
+    def _security_review(self, candidate: dict[str, Any]) -> bool:
         """Simulates a security review of the candidate code."""
         # Would normally delegate to the SecurityAgent
         return True

@@ -1,9 +1,11 @@
+from typing import Any
+
 import structlog
-from typing import Dict, Any, List
-from evoforge.model_router.router import ModelRouter, LLMRequest
-from evoforge.model_router.classifier import TaskType, TaskComplexity
+
 from evoforge.agents.base import BaseAgent
 from evoforge.agents.registry import ToolRegistry
+from evoforge.model_router.classifier import TaskComplexity, TaskType
+from evoforge.model_router.router import ModelRouter
 
 logger = structlog.get_logger(__name__)
 
@@ -26,7 +28,7 @@ class EvolutionAgent(BaseAgent):
             complexity=TaskComplexity.CRITICAL
         )
 
-    def propose_skill_update(self, agent_name: str, skill_name: str, failure_logs: str) -> Dict[str, Any]:
+    def propose_skill_update(self, agent_name: str, skill_name: str, failure_logs: str) -> dict[str, Any]:
         """Proposes changes to an agent's skill based on failures."""
         task_prompt = f"Agent '{agent_name}' has failed repeatedly while using skill '{skill_name}'.\nFailure logs:\n{failure_logs}\n\nBased on these failures, propose specific additions to their techniques, patterns, or anti-patterns to prevent this."
         

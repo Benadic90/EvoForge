@@ -1,8 +1,10 @@
+from typing import Any
+
 import structlog
-from typing import Dict, Any, Tuple
 from pydantic import BaseModel
+
+from evoforge.learning.benchmark_runner import BenchmarkResult, BenchmarkRunner, BenchmarkSuite
 from evoforge.learning.evolution_proposer import EvolutionProposal
-from evoforge.learning.benchmark_runner import BenchmarkRunner, BenchmarkSuite, BenchmarkResult
 from evoforge.utils.config import LearningConfig
 
 logger = structlog.get_logger(__name__)
@@ -41,7 +43,7 @@ class SkillEvaluator:
             reasoning=reasoning
         )
 
-    def _approve_or_reject(self, result: BenchmarkResult) -> Tuple[bool, str]:
+    def _approve_or_reject(self, result: BenchmarkResult) -> tuple[bool, str]:
         """Determines if the benchmark result meets the threshold for automatic deployment."""
         if not result.success:
             return False, "Benchmark failed (Regression detected)."

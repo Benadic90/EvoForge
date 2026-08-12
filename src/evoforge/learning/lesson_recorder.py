@@ -1,9 +1,11 @@
-import uuid
 import json
-import structlog
-from typing import Dict, Any, List, Optional
-from pydantic import BaseModel
+import uuid
 from datetime import datetime
+from typing import Any
+
+import structlog
+from pydantic import BaseModel
+
 from evoforge.memory.database import Database
 from evoforge.memory.obsidian import ObsidianManager
 
@@ -17,14 +19,14 @@ class EngineeringLesson(BaseModel):
     evidence_count: int
     learning: str
     status: str = "unverified"
-    correction: Optional[str] = None
+    correction: str | None = None
 
 class LessonRecorder:
     def __init__(self, db: Database, obsidian: ObsidianManager):
         self.db = db
         self.obsidian = obsidian
 
-    def record_outcome(self, agent_name: str, task_id: str, success: bool, details: Dict[str, Any]):
+    def record_outcome(self, agent_name: str, task_id: str, success: bool, details: dict[str, Any]):
         """Records the outcome of a task execution."""
         conn = self.db.get_connection()
         try:
@@ -57,7 +59,6 @@ class LessonRecorder:
         # Here we just look for exact substring matches in recent failures.
         # Since this is MVP, we'll assume the EvolutionAgent handles the heavy lifting
         # when it analyzes failures, but we stub the DB integration here.
-        pass
 
     def create_lesson(self, lesson: EngineeringLesson):
         """Creates a new engineering lesson in the database and Obsidian."""

@@ -1,8 +1,7 @@
-import pytest
-from evoforge.model_router.classifier import TaskType, TaskComplexity
-from evoforge.model_router.providers import DEFAULT_PROVIDERS
-from evoforge.model_router.router import ModelRouter, LLMRequest
+from evoforge.model_router.classifier import TaskComplexity, TaskType
 from evoforge.model_router.cost_tracker import CostTracker
+from evoforge.model_router.router import LLMRequest, ModelRouter
+
 
 def test_model_router_initialization():
     router = ModelRouter()

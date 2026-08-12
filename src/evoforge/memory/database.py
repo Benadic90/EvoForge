@@ -1,7 +1,7 @@
 import sqlite3
-import os
-import structlog
 from pathlib import Path
+
+import structlog
 
 logger = structlog.get_logger(__name__)
 
@@ -22,7 +22,21 @@ CREATE TABLE IF NOT EXISTS workflows (
     error_message TEXT,
     retry_count INTEGER DEFAULT 0,
     state_snapshot TEXT,
+    worker_id TEXT,
+    lease_expires_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Idempotent Operations Registry
+CREATE TABLE IF NOT EXISTS workflow_operations (
+    operation_key TEXT PRIMARY KEY,
+    workflow_id TEXT NOT NULL REFERENCES workflows(id),
+    task_id TEXT,
+    action TEXT NOT NULL,
+    status TEXT NOT NULL,
+    result TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(workflow_id, task_id, action)
 );
 
 -- Task queue
@@ -183,6 +197,12 @@ class Database:
             conn = self.get_connection()
             try:
                 conn.executescript(SCHEMA)
+                # Apply migrations conditionally
+                try:
+                    conn.execute("ALTER TABLE workflows ADD COLUMN worker_id TEXT")
+                    conn.execute("ALTER TABLE workflows ADD COLUMN lease_expires_at TIMESTAMP")
+                except sqlite3.OperationalError:
+                    pass # Columns already exist
                 conn.commit()
             finally:
                 conn.close()
@@ -198,3 +218,22 @@ class Database:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
+
+    def execute(self, query: str, params: tuple = ()) -> None:
+        """Execute a query and commit."""
+        conn = self.get_connection()
+        try:
+            conn.execute(query, params)
+            conn.commit()
+        finally:
+            conn.close()
+
+    def fetchall(self, query: str, params: tuple = ()) -> list:
+        """Execute a query and fetch all results."""
+        conn = self.get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            return cursor.fetchall()
+        finally:
+            conn.close()

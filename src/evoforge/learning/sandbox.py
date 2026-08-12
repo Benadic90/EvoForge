@@ -1,14 +1,15 @@
 import os
-import uuid
 import shutil
-from pathlib import Path
-from typing import Dict, Any, Callable, Optional
-from pydantic import BaseModel
-import structlog
+import uuid
+from collections.abc import Callable
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 
-from evoforge.memory.obsidian import ObsidianManager
+import structlog
+
 from evoforge.evolution.experiment import ExperimentFramework, ExperimentResult
+from evoforge.memory.obsidian import ObsidianManager
 
 logger = structlog.get_logger(__name__)
 
@@ -16,7 +17,7 @@ class SandboxEnvironment:
     def __init__(self, base_path: str = "data/sandbox"):
         self.base_path = Path(base_path)
         self.base_path.mkdir(parents=True, exist_ok=True)
-        self.active_sandboxes: Dict[str, Path] = {}
+        self.active_sandboxes: dict[str, Path] = {}
 
     def create_sandbox(self, prefix: str = "exp") -> str:
         """Creates an isolated temporary directory for an experiment."""

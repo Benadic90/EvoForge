@@ -1,15 +1,11 @@
+from datetime import UTC, datetime
 from enum import Enum
-from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
-from datetime import datetime
+from typing import Any
 
-class WorkflowState(Enum):
-    PENDING = "pending"
-    RUNNING = "running"
-    PAUSED = "paused"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CRASHED = "crashed"
+from pydantic import BaseModel, Field
+
+from evoforge.memory.state import WorkflowStage
+
 
 class TaskPriority(Enum):
     LOW = 0
@@ -22,14 +18,15 @@ class WorkflowTask(BaseModel):
     name: str
     description: str
     priority: TaskPriority
-    dependencies: List[str] = []
+    dependencies: list[str] = []
     agent_type: str  # "developer", "qa", etc.
-    status: WorkflowState = WorkflowState.PENDING
-    context: Dict[str, Any] = {}
+    status: WorkflowStage = WorkflowStage.INITIALIZE
+    context: dict[str, Any] = {}
     
 class WorkflowDefinition(BaseModel):
     id: str
     repo_name: str
-    tasks: List[WorkflowTask]
-    created_at: str = datetime.now().isoformat()
-    state: WorkflowState = WorkflowState.PENDING
+    tasks: list[WorkflowTask]
+    created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
+    state: WorkflowStage = WorkflowStage.INITIALIZE
+    dry_run: bool = False

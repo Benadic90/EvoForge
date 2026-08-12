@@ -1,7 +1,9 @@
-import structlog
-from typing import Dict, Any, List, Callable
-from pydantic import BaseModel
 import time
+from collections.abc import Callable
+from typing import Any
+
+import structlog
+from pydantic import BaseModel
 
 logger = structlog.get_logger(__name__)
 
@@ -11,7 +13,7 @@ class ExperimentResult(BaseModel):
     success: bool
     score: float
     duration_ms: float
-    metadata: Dict[str, Any] = {}
+    metadata: dict[str, Any] = {}
 
 class ExperimentFramework:
     def __init__(self):

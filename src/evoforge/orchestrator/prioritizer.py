@@ -1,11 +1,12 @@
+
 import structlog
-from typing import List
-from .workflows import WorkflowTask, TaskPriority
+
+from .workflows import WorkflowTask
 
 logger = structlog.get_logger(__name__)
 
 class TaskPrioritizer:
-    def sort_tasks(self, tasks: List[WorkflowTask]) -> List[WorkflowTask]:
+    def sort_tasks(self, tasks: list[WorkflowTask]) -> list[WorkflowTask]:
         """Sorts tasks based on priority and dependencies."""
         # Simple topological sort + priority for MVP
         sorted_tasks = sorted(tasks, key=lambda t: t.priority.value, reverse=True)

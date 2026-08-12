@@ -1,6 +1,6 @@
 import re
+
 import structlog
-from typing import List, Tuple
 
 logger = structlog.get_logger(__name__)
 
@@ -15,7 +15,7 @@ class SecretDetector:
             "private_key": re.compile(r"-----BEGIN [A-Z]+ PRIVATE KEY-----")
         }
 
-    def scan_text(self, text: str) -> List[Tuple[str, str]]:
+    def scan_text(self, text: str) -> list[tuple[str, str]]:
         """
         Scans text for secrets and returns a list of (secret_type, matched_string).
         """
