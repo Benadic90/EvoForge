@@ -10,6 +10,8 @@ from evoforge.memory.manager import MemoryManager
 from evoforge.memory.state import WorkflowStage, WorkflowState
 from evoforge.agents.registry import AgentRegistry
 from evoforge.agents.contracts import AgentContext
+from evoforge.model_router.routing import ExecutorRouter
+from evoforge.model_router.requirements import TaskRequirements
 
 from .prioritizer import TaskPrioritizer
 from .workflows import WorkflowDefinition, WorkflowTask
@@ -17,9 +19,10 @@ from .workflows import WorkflowDefinition, WorkflowTask
 logger = structlog.get_logger(__name__)
 
 class OrchestratorEngine:
-    def __init__(self, memory_manager: MemoryManager, agent_registry: AgentRegistry, learning_system: Any = None):
+    def __init__(self, memory_manager: MemoryManager, agent_registry: AgentRegistry, executor_router: ExecutorRouter = None, learning_system: Any = None):
         self.memory = memory_manager
         self.agent_registry = agent_registry
+        self.executor_router = executor_router
         self.prioritizer = TaskPrioritizer()
         self.learning = learning_system
         self.worker_id = str(uuid.uuid4())
@@ -130,10 +133,32 @@ class OrchestratorEngine:
 
     def _execute_task(self, task: WorkflowTask, state: WorkflowState):
         if not self.agent_registry.has(task.agent_type):
-            emitter.emit("task.failed", task_id=task.id, workflow_id=state.workflow_id, error=f"Agent '{task.agent_type}' not found")
+            logger.error("agent_not_found", agent_type=task.agent_type, task_id=task.id)
+            task.status = WorkflowStage.FAILED
+            task.context["error"] = f"Agent '{task.agent_type}' not found in registry."
             return
             
-        contract, executor = self.agent_registry.get(task.agent_type)
+        contract, _ = self.agent_registry.get(task.agent_type)
+        
+        # Build task requirements based on contract
+        requirements = TaskRequirements(
+            task_id=task.id,
+            required_capabilities=contract.capabilities
+        )
+        
+        # Fetch the best executor from the router
+        if self.executor_router:
+            emitter.emit("router.requested", task_id=task.id, workflow_id=state.workflow_id)
+            executor, explanation = self.executor_router.select_executor(requirements)
+            emitter.emit("router.executor.selected", 
+                         task_id=task.id, 
+                         workflow_id=state.workflow_id, 
+                         executor_id=explanation.selected_executor_id,
+                         score=explanation.score)
+        else:
+            # Fallback to direct registry executor if no router is provided (for tests)
+            _, executor = self.agent_registry.get(task.agent_type)
+        
         emitter.emit("task.started", task_id=task.id, workflow_id=state.workflow_id, agent_id=task.agent_type)
         
         try:

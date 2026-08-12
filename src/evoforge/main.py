@@ -115,5 +115,83 @@ def capability_agents(capability: str):
     console.print(table)
 
     
+@app.command("executors")
+def list_executors():
+    """List all available executors in the routing system."""
+    from evoforge.model_router.executors import ExecutorRegistry, LocalModelExecutor, GeminiExecutor, NvidiaExecutor, AntigravityExecutor
+    registry = ExecutorRegistry()
+    registry.register("local", LocalModelExecutor(), [AgentCapability.CODING])
+    registry.register("gemini", GeminiExecutor(), [AgentCapability.CODING, AgentCapability.REASONING])
+    registry.register("nvidia", NvidiaExecutor(), [AgentCapability.CODING, AgentCapability.REASONING])
+    registry.register("antigravity", AntigravityExecutor(), [AgentCapability.CODING, AgentCapability.REASONING, AgentCapability.BROWSER, AgentCapability.TERMINAL, AgentCapability.REPO_NAVIGATION])
+    
+    table = Table(title="Registered Executors")
+    table.add_column("Executor ID", style="cyan")
+    table.add_column("Healthy")
+    table.add_column("Enabled")
+    table.add_column("Capabilities")
+    
+    for exc in sorted(registry.list_all()):
+        healthy = "[green]Yes[/green]" if registry.is_healthy(exc) else "[red]No[/red]"
+        enabled = "[green]Yes[/green]" if registry.is_enabled(exc) else "[red]No[/red]"
+        caps = ", ".join([c.value for c in registry.get_capabilities(exc)])
+        table.add_row(exc, healthy, enabled, caps)
+        
+    console.print(table)
+
+
+@app.command("route-test")
+def route_test(task: str):
+    """Dry-run the model router for a specific task description."""
+    from evoforge.model_router.requirements import TaskRequirements, TaskClassification
+    from evoforge.model_router.executors import ExecutorRegistry, LocalModelExecutor, GeminiExecutor, NvidiaExecutor, AntigravityExecutor
+    from evoforge.model_router.routing import ExecutorRouter
+    
+    registry = ExecutorRegistry()
+    registry.register("local", LocalModelExecutor(), [AgentCapability.CODING])
+    registry.register("gemini", GeminiExecutor(), [AgentCapability.CODING, AgentCapability.REASONING])
+    registry.register("nvidia", NvidiaExecutor(), [AgentCapability.CODING, AgentCapability.REASONING])
+    registry.register("antigravity", AntigravityExecutor(), [AgentCapability.CODING, AgentCapability.REASONING, AgentCapability.BROWSER, AgentCapability.TERMINAL, AgentCapability.REPO_NAVIGATION, AgentCapability.TESTING, AgentCapability.MULTI_FILE_EDITING])
+    
+    router = ExecutorRouter(registry)
+    
+    # Infer capabilities from prompt just for this CLI mock test
+    req_caps = [AgentCapability.CODING]
+    if "test" in task.lower():
+        req_caps.append(AgentCapability.TESTING)
+    if "refactor" in task.lower():
+        req_caps.append(AgentCapability.MULTI_FILE_EDITING)
+    if "repo" in task.lower():
+        req_caps.append(AgentCapability.REPO_NAVIGATION)
+        
+    req = TaskRequirements(
+        task_id="test_task",
+        task_type=TaskClassification.CODING,
+        required_capabilities=req_caps
+    )
+    
+    console.print(f"\n[bold]Task:[/bold] {task}")
+    console.print("[bold]Required capabilities:[/bold]")
+    for c in req_caps:
+        console.print(f"  {c.value}")
+    
+    try:
+        executor, explanation = router.select_executor(req)
+        
+        console.print("\n[bold]Candidates:[/bold]")
+        # We can't easily print all candidates' scores here because select_executor returns the best one.
+        # But we can print the rejected ones.
+        for rej, reasons in explanation.rejected.items():
+            console.print(f"  [red]{rej}[/red] (Rejected)")
+        
+        console.print(f"\n[bold]Selected:[/bold]\n  [green]{explanation.selected_executor_id}[/green]")
+        console.print(f"\n[bold]Reason:[/bold] (Score: {explanation.score:.2f})")
+        for reason in explanation.reasons:
+            console.print(f"  {reason}")
+            
+    except RuntimeError as e:
+        console.print(f"\n[bold red]Routing Failed:[/bold red] {e}")
+
+
 if __name__ == "__main__":
     app()
