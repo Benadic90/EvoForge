@@ -6,23 +6,31 @@ from evoforge.memory.database import Database
 from evoforge.memory.idempotency import IdempotencyManager
 from evoforge.memory.manager import MemoryManager
 from evoforge.memory.obsidian import ObsidianManager
-from evoforge.memory.state import WorkflowStage
+from evoforge.memory.state import WorkflowStage, WorkflowState
 from evoforge.orchestrator.engine import OrchestratorEngine
 from evoforge.orchestrator.workflows import WorkflowDefinition, WorkflowTask
+from evoforge.agents.registry import AgentRegistry
+from evoforge.agents.contracts import AgentContract, AgentContext, AgentResult, AgentExecutor
 
 logger = structlog.get_logger(__name__)
 
-class MockAgent:
-    def __init__(self, name, fail_first=False):
-        self.name = name
+class MockExecutor(AgentExecutor):
+    def __init__(self, id_val: str = "developer", fail_first: bool = False):
+        self.id_val = id_val
         self.fail_first = fail_first
         self.calls = 0
-
-    def implement_feature(self, *args, **kwargs):
+        
+    def execute(self, context: AgentContext) -> AgentResult:
         self.calls += 1
         if self.fail_first and self.calls == 1:
             raise ValueError("Transient error")
-        return "implemented"
+        return AgentResult(
+            success=True,
+            agent_id=self.id_val,
+            task_id=context.task_id,
+            workflow_id=context.workflow_id,
+            summary=f"executed by {self.id_val}"
+        )
 
 def setup_env(tmp_path):
     db_path = str(tmp_path / "test.db")
@@ -34,8 +42,13 @@ def setup_env(tmp_path):
 
 def test_workflow_crash_recovery_resumes_execution(tmp_path):
     db, manager = setup_env(tmp_path)
-    agent = MockAgent("dev1")
-    engine = OrchestratorEngine(manager, {"developer": agent})
+    
+    registry = AgentRegistry()
+    executor = MockExecutor()
+    contract = AgentContract(agent_id="developer", name="Dev", display_name="Dev", role="Dev", description="Dev", version="1")
+    registry.register(contract, executor)
+    
+    engine = OrchestratorEngine(manager, registry)
     
     # 1. Define workflow and inject a partially completed state
     task1 = WorkflowTask(id="task_1", name="Task 1", description="Implement a feature", priority=1, agent_type="developer")
@@ -54,20 +67,26 @@ def test_workflow_crash_recovery_resumes_execution(tmp_path):
     db.execute("UPDATE workflows SET lease_expires_at = ? WHERE id = ?", (past, "wf_123"))
     manager.record_workflow_checkpoint(state)
     
-    assert agent.calls == 0
+    assert executor.calls == 0
     
     # 2. Recover
     engine.recover_crashed_workflows()
     
     # 3. Verify it resumed and executed the task
-    assert agent.calls == 1
+    assert executor.calls == 1
     rows = db.fetchall("SELECT status FROM workflows WHERE id = ?", ("wf_123",))
     assert rows[0]["status"] == WorkflowStage.COMPLETE.value
 
 def test_workflow_concurrent_locks(tmp_path):
     db, manager = setup_env(tmp_path)
-    engine_A = OrchestratorEngine(manager, {"developer": MockAgent("devA")})
-    engine_B = OrchestratorEngine(manager, {"developer": MockAgent("devB")})
+    
+    reg_a = AgentRegistry()
+    reg_a.register(AgentContract(agent_id="developer", name="DevA", display_name="DevA", role="DevA", description="DevA", version="1"), MockExecutor("devA"))
+    engine_A = OrchestratorEngine(manager, reg_a)
+    
+    reg_b = AgentRegistry()
+    reg_b.register(AgentContract(agent_id="developer", name="DevB", display_name="DevB", role="DevB", description="DevB", version="1"), MockExecutor("devB"))
+    engine_B = OrchestratorEngine(manager, reg_b)
     
     db.execute("INSERT INTO workflows (id, project, workflow_type) VALUES (?, ?, ?)", ("wf_lock", "test/repo", "test"))
     
@@ -96,8 +115,11 @@ def test_idempotency_manager(tmp_path):
 def test_workflow_retry_budget(tmp_path):
     db, manager = setup_env(tmp_path)
     # Agent fails first time, succeeds second
-    agent = MockAgent("dev1", fail_first=True)
-    engine = OrchestratorEngine(manager, {"developer": agent})
+    registry = AgentRegistry()
+    executor = MockExecutor("dev1", fail_first=True)
+    contract = AgentContract(agent_id="developer", name="Dev", display_name="Dev", role="Dev", description="Dev", version="1")
+    registry.register(contract, executor)
+    engine = OrchestratorEngine(manager, registry)
     
     task1 = WorkflowTask(id="task_retry", name="Task Retry", description="Retry me", priority=1, agent_type="developer")
     workflow_def = WorkflowDefinition(id="wf_retry", repo_name="test/repo", tasks=[task1])
@@ -109,6 +131,6 @@ def test_workflow_retry_budget(tmp_path):
     # Actually wait: The orchestrator's state loop doesn't restart the task if it failed, it just marks the workflow as failed if it exceeds attempts.
     # Ah, the orchestrator handles stage retries! Since IMPLEMENT failed, `execute_stage_logic` raises, it records attempt, loops again.
     
-    assert agent.calls == 2
+    assert executor.calls == 2
     rows = db.fetchall("SELECT status FROM workflows WHERE id = ?", ("wf_retry",))
     assert rows[0]["status"] == WorkflowStage.COMPLETE.value

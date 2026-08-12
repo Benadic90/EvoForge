@@ -1,23 +1,52 @@
 from unittest.mock import MagicMock
+import pytest
 
 from evoforge.memory.events import emitter
 from evoforge.memory.manager import MemoryManager
 from evoforge.memory.state import WorkflowStage
 from evoforge.orchestrator.engine import OrchestratorEngine
+from evoforge.agents.registry import AgentRegistry
+from evoforge.agents.contracts import AgentContract, AgentContext, AgentResult, AgentExecutor
 from evoforge.orchestrator.workflows import TaskPriority, WorkflowDefinition, WorkflowTask
 
+class MockExecutor(AgentExecutor):
+    def __init__(self):
+        self.call_count = 0
+        
+    def execute(self, context: AgentContext) -> AgentResult:
+        self.call_count += 1
+        return AgentResult(
+            success=True,
+            agent_id="developer",
+            task_id=context.task_id,
+            workflow_id=context.workflow_id,
+            summary="Code written.",
+        )
 
-def test_workflow_execution():
-    emitter.store = None # Disable persistent event store for this test
-    mock_memory = MagicMock(spec=MemoryManager)
-    mock_memory.db = MagicMock()
+@pytest.fixture
+def mock_memory():
+    mock = MagicMock(spec=MemoryManager)
+    mock.db = MagicMock()
+    return mock
+
+@pytest.fixture(autouse=True)
+def disable_emitter():
+    original_store = emitter.store
+    emitter.store = None
+    yield
+    emitter.store = original_store
+
+@pytest.fixture
+def engine(mock_memory):
+    registry = AgentRegistry()
+    contract = AgentContract(agent_id="developer", name="Dev", display_name="Dev", role="Dev", description="Dev", version="1")
+    registry.register(contract, MockExecutor())
     
-    mock_dev_agent = MagicMock()
-    mock_dev_agent.implement_feature.return_value = "Code written."
-    
-    agents = {"developer": mock_dev_agent}
-    engine = OrchestratorEngine(mock_memory, agents)
-    
+    engine = OrchestratorEngine(mock_memory, registry)
+    engine.worker_id = "test-worker-id"
+    return engine
+
+def test_workflow_execution(engine, mock_memory):
     # Mock the lease acquisition to succeed by returning the engine's worker_id
     mock_memory.db.fetchall.return_value = [{"worker_id": engine.worker_id}]
     
@@ -51,4 +80,5 @@ def test_workflow_execution():
     
     # Check prioritization: task1 (HIGH) should be executed before task2 (LOW)
     # The prioritizer sorts descending, so task1 is index 0 in sorted list
-    assert mock_dev_agent.implement_feature.call_count == 2
+    _, executor = engine.agent_registry.get("developer")
+    assert executor.call_count == 2

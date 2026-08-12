@@ -8,6 +8,8 @@ import structlog
 from evoforge.memory.events import emitter
 from evoforge.memory.manager import MemoryManager
 from evoforge.memory.state import WorkflowStage, WorkflowState
+from evoforge.agents.registry import AgentRegistry
+from evoforge.agents.contracts import AgentContext
 
 from .prioritizer import TaskPrioritizer
 from .workflows import WorkflowDefinition, WorkflowTask
@@ -15,9 +17,9 @@ from .workflows import WorkflowDefinition, WorkflowTask
 logger = structlog.get_logger(__name__)
 
 class OrchestratorEngine:
-    def __init__(self, memory_manager: MemoryManager, agent_roster: dict[str, Any], learning_system: Any = None):
+    def __init__(self, memory_manager: MemoryManager, agent_registry: AgentRegistry, learning_system: Any = None):
         self.memory = memory_manager
-        self.agents = agent_roster
+        self.agent_registry = agent_registry
         self.prioritizer = TaskPrioritizer()
         self.learning = learning_system
         self.worker_id = str(uuid.uuid4())
@@ -127,35 +129,41 @@ class OrchestratorEngine:
             self.memory.db.execute("UPDATE workflows SET lease_expires_at = NULL WHERE id = ? AND worker_id = ?", (state.workflow_id, self.worker_id))
 
     def _execute_task(self, task: WorkflowTask, state: WorkflowState):
-        task.status = WorkflowStage.IMPLEMENT
-        agent = self.agents.get(task.agent_type)
-        
-        if not agent:
-            task.status = WorkflowStage.FAILED
+        if not self.agent_registry.has(task.agent_type):
             emitter.emit("task.failed", task_id=task.id, workflow_id=state.workflow_id, error=f"Agent '{task.agent_type}' not found")
             return
-
+            
+        contract, executor = self.agent_registry.get(task.agent_type)
         emitter.emit("task.started", task_id=task.id, workflow_id=state.workflow_id, agent_id=task.agent_type)
         
         try:
-            if task.agent_type == "developer":
-                result = agent.implement_feature(task.description, context_files=[])
-            elif task.agent_type == "qa":
-                result = agent.write_tests(task.description, "test_output.py")
-            elif task.agent_type == "reviewer":
-                result = agent.review_changes(task.description)
-            elif task.agent_type == "security":
-                result = agent.audit_code(task.description)
-            else:
-                result = agent.think_and_act(task.description, task_type=None, complexity=None)
-                
-            task.context["result"] = result
+            # Construct standard context
+            context = AgentContext(
+                run_id=state.run_id,
+                workflow_id=state.workflow_id,
+                task_id=task.id,
+                task_description=task.description,
+                project_id=state.project_id,
+                repository_id=state.repository_id,
+                current_stage=state.current_stage,
+                dry_run=state.dry_run,
+                permissions=[],
+                available_tools=[],
+                required_capabilities=[],
+                memory_context={}
+            )
+            
+            # Execute standard interface
+            result = executor.execute(context)
+            
             task.status = WorkflowStage.COMPLETE
+            task.context["result"] = result.summary
+            
             emitter.emit("task.completed", task_id=task.id, workflow_id=state.workflow_id, agent_id=task.agent_type)
             
             if self.learning:
-                details = {"description": task.description, "context": task.context}
-                self.learning.record_outcome(task.agent_type, task.id, True, details)
+                details = {"complexity": "unknown", "result_summary": result.summary[:100]}
+                self.learning.record_outcome(task.agent_type, task.id, result.success, details)
             
         except Exception as e:
             task.status = WorkflowStage.FAILED
