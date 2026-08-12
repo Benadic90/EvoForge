@@ -19,10 +19,22 @@ class LoggingConfig(BaseModel):
     level: str = "INFO"
     format: str = "json"
 
+class LearningConfig(BaseModel):
+    enabled: bool = True
+    research_budget_usd: float = 1.00
+    max_research_per_day: int = 5
+    auto_deploy_threshold: float = 0.05  # 5% improvement
+    auto_deploy_confidence: float = 0.85
+    high_volatility_interval_days: int = 7
+    medium_volatility_interval_days: int = 14
+    low_volatility_interval_days: int = 30
+    sandbox_path: str = "data/sandbox"
+
 class AppConfig(BaseModel):
     global_settings: GlobalConfig = GlobalConfig()
     database: DatabaseConfig = DatabaseConfig()
     logging: LoggingConfig = LoggingConfig()
+    learning: LearningConfig = LearningConfig()
 
 def load_config(config_path: str = "config/default.yaml") -> AppConfig:
     """Loads configuration from YAML file."""

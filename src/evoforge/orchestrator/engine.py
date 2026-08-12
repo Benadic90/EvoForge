@@ -9,10 +9,11 @@ from evoforge.memory.manager import MemoryManager
 logger = structlog.get_logger(__name__)
 
 class OrchestratorEngine:
-    def __init__(self, memory_manager: MemoryManager, agent_roster: Dict[str, Any]):
+    def __init__(self, memory_manager: MemoryManager, agent_roster: Dict[str, Any], learning_system: Any = None):
         self.memory = memory_manager
         self.agents = agent_roster
         self.prioritizer = TaskPrioritizer()
+        self.learning = learning_system
 
     def execute_workflow(self, workflow: WorkflowDefinition):
         """Executes a workflow by delegating to specific agents."""
@@ -67,10 +68,21 @@ class OrchestratorEngine:
             task.status = WorkflowState.COMPLETED
             logger.info("task_completed", task_id=task.id)
             
+            # Record outcome for learning system
+            if self.learning:
+                details = {"description": task.description, "context": task.context}
+                self.learning.record_outcome(task.agent_type, task.id, True, details)
+            
         except Exception as e:
             task.status = WorkflowState.FAILED
             task.context["error"] = str(e)
             logger.error("task_failed", task_id=task.id, error=str(e))
+            
+            # Record outcome for learning system
+            if self.learning:
+                details = {"description": task.description, "error_message": str(e), "attempted_solution": task.context.get("result", "")}
+                self.learning.record_outcome(task.agent_type, task.id, False, details)
+                
             raise
 
     def recover_crashed_workflows(self):
@@ -89,5 +101,12 @@ class OrchestratorEngine:
         # Log daily summary to Obsidian
         summary = f"# Daily Loop Results\nProcessed {len(workflows)} workflows."
         self.memory.log_daily_summary(summary)
+        
+        # Run scheduled research after main work
+        if self.learning and hasattr(self.learning, 'run_scheduled_research'):
+            self.learning.run_scheduled_research()
+            
+        if self.learning and hasattr(self.learning, 'check_stale_skills'):
+            self.learning.check_stale_skills()
         
         logger.info("daily_loop_finished")

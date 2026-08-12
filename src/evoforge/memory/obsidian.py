@@ -14,13 +14,36 @@ class ObsidianManager:
             "agents": self.vault_path / "Agents",
             "daily": self.vault_path / "Daily",
             "knowledge": self.vault_path / "Knowledge Base",
+            "research": self.vault_path / "Research",
+            "evolution": self.vault_path / "Evolution",
+            "sandbox": self.vault_path / "Sandbox",
         }
+        
+        # Subdirectories
+        self.subdirs = [
+            self.folders["knowledge"] / "verified",
+            self.folders["knowledge"] / "experimental",
+            self.folders["knowledge"] / "deprecated",
+            self.folders["research"] / "inbox",
+            self.folders["research"] / "verified",
+            self.folders["research"] / "experiments",
+            self.folders["research"] / "rejected",
+            self.folders["research"] / "deprecated",
+            self.folders["evolution"] / "failures",
+            self.folders["sandbox"] / "experiments",
+            self.folders["sandbox"] / "coding-challenges",
+            self.folders["sandbox"] / "benchmarks",
+            self.folders["sandbox"] / "prototypes",
+            self.folders["sandbox"] / "failed-attempts",
+        ]
 
     def init_vault(self):
         """Creates the base folder structure for the Obsidian vault."""
         self.vault_path.mkdir(parents=True, exist_ok=True)
         for folder in self.folders.values():
             folder.mkdir(exist_ok=True)
+        for subdir in self.subdirs:
+            subdir.mkdir(parents=True, exist_ok=True)
             
         # Create a welcome/index note
         index_path = self.vault_path / "EvoForge Index.md"
@@ -40,6 +63,20 @@ class ObsidianManager:
         note_path = self.folders["daily"] / f"{date_str}.md"
         self._write_note(note_path, content)
         
+    def write_agent_profile(self, agent_name: str, content: str, frontmatter: Optional[Dict] = None):
+        """Writes or updates an agent profile note."""
+        agent_dir = self.folders["agents"] / agent_name
+        agent_dir.mkdir(parents=True, exist_ok=True)
+        note_path = agent_dir / "profile.md"
+        self._write_note(note_path, content, frontmatter)
+        
+    def write_skill_note(self, agent_name: str, skill_name: str, content: str, frontmatter: Optional[Dict] = None):
+        """Writes or updates a specific skill note for an agent."""
+        skills_dir = self.folders["agents"] / agent_name / "skills"
+        skills_dir.mkdir(parents=True, exist_ok=True)
+        note_path = skills_dir / f"{skill_name}.md"
+        self._write_note(note_path, content, frontmatter)
+
     def _write_note(self, path: Path, content: str, frontmatter: Optional[Dict] = None):
         """Helper to write a note with optional YAML frontmatter."""
         try:

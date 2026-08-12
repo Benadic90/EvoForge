@@ -25,3 +25,32 @@ class EvolutionAgent(BaseAgent):
             task_type=TaskType.REASONING,
             complexity=TaskComplexity.CRITICAL
         )
+
+    def propose_skill_update(self, agent_name: str, skill_name: str, failure_logs: str) -> Dict[str, Any]:
+        """Proposes changes to an agent's skill based on failures."""
+        task_prompt = f"Agent '{agent_name}' has failed repeatedly while using skill '{skill_name}'.\nFailure logs:\n{failure_logs}\n\nBased on these failures, propose specific additions to their techniques, patterns, or anti-patterns to prevent this."
+        
+        # In a real setup, we would parse JSON output.
+        # Stubbing the output parsing for MVP.
+        result = self.think_and_act(
+            task_description=task_prompt,
+            task_type=TaskType.REASONING,
+            complexity=TaskComplexity.HIGH
+        )
+        
+        return {
+            "proposed_changes": {"patterns": [f"Learn from: {result[:50]}..."]},
+            "evidence": f"Analyzed {len(failure_logs.splitlines())} lines of failure logs.",
+            "expected_improvement": "Objective improvement in handling edge cases."
+        }
+
+    def review_proposal(self, agent_name: str, skill_name: str, proposal_details: str) -> bool:
+        """Reviews an innovation proposal to ensure it's objectively sound."""
+        task_prompt = f"Review the following skill update proposal for {agent_name} ({skill_name}):\n\n{proposal_details}\n\nIs this a safe and objectively measurable improvement? Reply only YES or NO."
+        
+        result = self.think_and_act(
+            task_description=task_prompt,
+            task_type=TaskType.REASONING,
+            complexity=TaskComplexity.MEDIUM
+        )
+        return "YES" in result.upper()

@@ -52,6 +52,119 @@ CREATE TABLE IF NOT EXISTS metrics (
     tags TEXT,
     recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Agent skill profiles
+CREATE TABLE IF NOT EXISTS skills (
+    id TEXT PRIMARY KEY,
+    agent_name TEXT NOT NULL,
+    skill_name TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    confidence REAL NOT NULL DEFAULT 0.5,
+    capability_level TEXT DEFAULT 'beginner',
+    last_verified TIMESTAMP,
+    last_researched TIMESTAMP,
+    freshness TEXT DEFAULT 'unknown',
+    status TEXT DEFAULT 'active',
+    metadata TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(agent_name, skill_name, version)
+);
+
+-- Versioned skill snapshots for rollback
+CREATE TABLE IF NOT EXISTS skill_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    skill_id TEXT NOT NULL REFERENCES skills(id),
+    version INTEGER NOT NULL,
+    system_prompt_patch TEXT,
+    techniques TEXT,
+    tools TEXT,
+    patterns TEXT,
+    anti_patterns TEXT,
+    benchmark_score REAL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Knowledge items with lifecycle
+CREATE TABLE IF NOT EXISTS knowledge_items (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    domain TEXT NOT NULL,
+    content TEXT,
+    source TEXT,
+    source_type TEXT,
+    source_url TEXT,
+    publication_date TEXT,
+    retrieved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    confidence REAL DEFAULT 0.0,
+    verification_status TEXT DEFAULT 'unverified',
+    lifecycle_state TEXT DEFAULT 'discovered',
+    applicable_agents TEXT,
+    metadata TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Research items (inbox/pipeline)
+CREATE TABLE IF NOT EXISTS research_items (
+    id TEXT PRIMARY KEY,
+    agent_name TEXT NOT NULL,
+    topic TEXT NOT NULL,
+    domain TEXT NOT NULL,
+    volatility TEXT DEFAULT 'medium',
+    trigger TEXT DEFAULT 'scheduled',
+    status TEXT DEFAULT 'pending',
+    findings TEXT,
+    sources TEXT,
+    scheduled_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Engineering lessons from real work
+CREATE TABLE IF NOT EXISTS lessons (
+    id TEXT PRIMARY KEY,
+    agent_name TEXT NOT NULL,
+    problem TEXT NOT NULL,
+    evidence TEXT,
+    evidence_count INTEGER DEFAULT 0,
+    learning TEXT NOT NULL,
+    correction TEXT,
+    status TEXT DEFAULT 'unverified',
+    applied_to_version TEXT,
+    regression_result TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Benchmark suites and results
+CREATE TABLE IF NOT EXISTS benchmarks (
+    id TEXT PRIMARY KEY,
+    agent_name TEXT NOT NULL,
+    suite_name TEXT NOT NULL,
+    task_count INTEGER,
+    baseline_score REAL,
+    current_score REAL,
+    improvement_pct REAL,
+    last_run TIMESTAMP,
+    results TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Failure registry
+CREATE TABLE IF NOT EXISTS failures (
+    id TEXT PRIMARY KEY,
+    agent_name TEXT NOT NULL,
+    task_id TEXT,
+    task_description TEXT,
+    context TEXT,
+    attempted_solution TEXT,
+    failure_reason TEXT,
+    correction TEXT,
+    lesson_id TEXT REFERENCES lessons(id),
+    correction_worked BOOLEAN,
+    regression_passed BOOLEAN,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 class Database:

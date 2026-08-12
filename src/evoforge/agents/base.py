@@ -10,18 +10,23 @@ from .registry import ToolRegistry
 logger = structlog.get_logger(__name__)
 
 class BaseAgent:
-    def __init__(self, name: str, role: str, model_router: ModelRouter, tools: ToolRegistry):
+    def __init__(self, name: str, role: str, model_router: ModelRouter, tools: ToolRegistry, skill_profile=None):
         self.name = name
         self.role = role
         self.router = model_router
         self.fallback_manager = FallbackManager(self.router)
         self.tools = tools
+        self.skill_profile = skill_profile
         self.memory: List[Dict[str, str]] = []
 
     def _get_system_prompt(self) -> str:
-        """Generates the system prompt including tool descriptions."""
-        base_prompt = f"You are {self.name}, an AI software engineer. Your role is: {self.role}.\n\n"
-        base_prompt += "You have access to the following tools. To use a tool, respond with a JSON object: {\"tool\": \"tool_name\", \"kwargs\": {\"arg1\": \"value\"}}\n"
+        """Generates the system prompt including tool descriptions and skills."""
+        base_prompt = f"You are {self.name}, an AI software engineer. Your role is: {self.role}\n"
+        
+        if self.skill_profile:
+            base_prompt += self.skill_profile.render_skills_context()
+            
+        base_prompt += "\nYou have access to the following tools. To use a tool, respond with a JSON object: {\"tool\": \"tool_name\", \"kwargs\": {\"arg1\": \"value\"}}\n"
         base_prompt += "Tools available:\n"
         
         for t in self.tools.list_tools():
