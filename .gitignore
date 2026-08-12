@@ -1,0 +1,38 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables
+.env
+
+# SQLite Database
+*.sqlite
+*.sqlite3
+*.db
+
+# EvoForge local workspaces (if any generated inside)
+evoforge_workspaces/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# macOS
+.DS_Store

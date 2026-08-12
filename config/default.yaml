@@ -1,0 +1,17 @@
+# Default Configuration for EvoForge
+
+global:
+  max_daily_api_cost_usd: 5.00
+  max_prs_per_day: 10
+  max_retries_per_task: 3
+  require_tests_pass: true
+  require_security_scan: true
+  never_auto_merge: true
+  never_auto_deploy: true
+
+database:
+  sqlite_path: "data/evoforge.db"
+
+logging:
+  level: "INFO"
+  format: "json"
