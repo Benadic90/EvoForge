@@ -1,108 +1,176 @@
 package com.evoforge.mobile.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.Memory
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Groups
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.evoforge.mobile.ui.theme.SemanticSuccess
-import com.evoforge.mobile.ui.theme.SemanticError
-import com.evoforge.mobile.ui.theme.SemanticWarning
+import com.evoforge.mobile.ui.theme.*
 
 @Composable
 fun HomeScreen() {
-    // In a production app with DI (Hilt/Koin), a SystemViewModel would be injected here.
-    // For now, display the dashboard structure with offline-aware placeholders.
-    var isConnected by remember { mutableStateOf(false) }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
             .verticalScroll(rememberScrollState())
-            .padding(16.dp)
+            .padding(20.dp)
     ) {
+        // Header
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(bottom = 4.dp)
+        ) {
+            // Status dot
+            Box(
+                modifier = Modifier
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(StatusOnline)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                "EvoForge",
+                style = MaterialTheme.typography.headlineLarge
+            )
+        }
         Text(
             "Mission Control",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            "EvoForge Mobile",
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // System Status
-        StatusCard(
-            title = "Control Plane",
-            value = if (isConnected) "ONLINE" else "NOT CONFIGURED",
-            color = if (isConnected) SemanticSuccess else MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        StatusCard(
-            title = "Compute Mode",
-            value = "HYBRID",
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        StatusCard(
-            title = "Scheduler",
-            value = if (isConnected) "RUNNING" else "UNKNOWN",
-            color = if (isConnected) SemanticSuccess else MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 28.dp)
         )
 
-        Spacer(modifier = Modifier.height(24.dp))
-
+        // System Status Section
         Text(
-            "Quick Stats",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold
+            "SYSTEM STATUS",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 12.dp)
         )
-        Spacer(modifier = Modifier.height(12.dp))
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            MetricCard(modifier = Modifier.weight(1f), label = "Workflows", value = "—")
-            MetricCard(modifier = Modifier.weight(1f), label = "Tasks Queued", value = "—")
+        SystemStatusRow(
+            icon = Icons.Outlined.Cloud,
+            label = "Control Plane",
+            status = "NOT CONFIGURED",
+            statusColor = TextTertiaryDark
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        SystemStatusRow(
+            icon = Icons.Outlined.Schedule,
+            label = "Scheduler",
+            status = "UNKNOWN",
+            statusColor = TextTertiaryDark
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        SystemStatusRow(
+            icon = Icons.Outlined.Memory,
+            label = "Compute Mode",
+            status = "HYBRID",
+            statusColor = StatusInfo
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // Quick Stats
+        Text(
+            "OVERVIEW",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            StatCard(
+                modifier = Modifier.weight(1f),
+                icon = Icons.Rounded.PlayArrow,
+                value = "0",
+                label = "Workflows",
+                accentColor = StatusRunning
+            )
+            StatCard(
+                modifier = Modifier.weight(1f),
+                icon = Icons.Rounded.CheckCircle,
+                value = "0",
+                label = "Tasks Queued",
+                accentColor = StatusOnline
+            )
         }
         Spacer(modifier = Modifier.height(12.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            MetricCard(modifier = Modifier.weight(1f), label = "Workers", value = "—")
-            MetricCard(modifier = Modifier.weight(1f), label = "Agents", value = "—")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            StatCard(
+                modifier = Modifier.weight(1f),
+                icon = Icons.Rounded.Storage,
+                value = "0",
+                label = "Workers",
+                accentColor = StatusInfo
+            )
+            StatCard(
+                modifier = Modifier.weight(1f),
+                icon = Icons.Rounded.Groups,
+                value = "0",
+                label = "Agents",
+                accentColor = StatusWarning
+            )
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(32.dp))
 
+        // Recent Activity
         Text(
-            "Recent Activity",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold
+            "RECENT ACTIVITY",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 12.dp)
         )
-        Spacer(modifier = Modifier.height(12.dp))
 
-        Card(
+        Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            color = MaterialTheme.colorScheme.surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
         ) {
-            Box(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(24.dp),
-                contentAlignment = Alignment.Center
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    "Connect to a Control Plane in Settings to see live activity.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium
+                    "No recent events",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "Configure your Control Plane in Settings",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiaryDark
                 )
             }
         }
@@ -110,49 +178,95 @@ fun HomeScreen() {
 }
 
 @Composable
-fun StatusCard(title: String, value: String, color: Color) {
-    Card(
+fun SystemStatusRow(
+    icon: ImageVector,
+    label: String,
+    status: String,
+    statusColor: Color
+) {
+    Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(title, fontSize = 15.sp, fontWeight = FontWeight.Medium)
-            Text(value, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = color)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    label,
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = statusColor.copy(alpha = 0.12f)
+            ) {
+                Text(
+                    status,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = statusColor
+                )
+            }
         }
     }
 }
 
 @Composable
-fun MetricCard(modifier: Modifier = Modifier, label: String, value: String) {
-    Card(
+fun StatCard(
+    modifier: Modifier = Modifier,
+    icon: ImageVector,
+    value: String,
+    label: String,
+    accentColor: Color
+) {
+    Surface(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(value, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
-fun ErrorCard(message: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
-    ) {
-        Box(modifier = Modifier.padding(16.dp)) {
-            Text(message, color = MaterialTheme.colorScheme.onErrorContainer)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(accentColor.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = accentColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(14.dp))
+            Text(
+                value,
+                style = MaterialTheme.typography.headlineMedium
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

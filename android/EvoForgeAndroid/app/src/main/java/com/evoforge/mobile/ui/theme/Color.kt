@@ -2,19 +2,33 @@ package com.evoforge.mobile.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val DarkBackground = Color(0xFF121212)
-val DarkSurface = Color(0xFF1E1E1E)
-val LightBackground = Color(0xFFF5F5F5)
+// Neutral base palette
+val DarkBackground = Color(0xFF0F1114)
+val DarkSurface = Color(0xFF1A1D21)
+val DarkSurfaceVariant = Color(0xFF22262B)
+val DarkBorder = Color(0xFF2E3338)
+
+val LightBackground = Color(0xFFF8F9FA)
 val LightSurface = Color(0xFFFFFFFF)
+val LightSurfaceVariant = Color(0xFFF1F3F5)
+val LightBorder = Color(0xFFDEE2E6)
 
-// Semantic accents
-val SemanticSuccess = Color(0xFF00FFAA)
-val SemanticWarning = Color(0xFFFFAA00)
-val SemanticError = Color(0xFFFF3366)
-val SemanticInfo = Color(0xFF00F0FF)
+// Semantic status colors
+val StatusOnline = Color(0xFF34D399)
+val StatusWarning = Color(0xFFFBBF24)
+val StatusError = Color(0xFFEF4444)
+val StatusInfo = Color(0xFF60A5FA)
+val StatusRunning = Color(0xFF818CF8)
 
-val PrimaryTextDark = Color(0xFFE0E0E0)
-val SecondaryTextDark = Color(0xFFA0A0A0)
+// Text
+val TextPrimaryDark = Color(0xFFE5E7EB)
+val TextSecondaryDark = Color(0xFF9CA3AF)
+val TextTertiaryDark = Color(0xFF6B7280)
 
-val PrimaryTextLight = Color(0xFF1A1A1A)
-val SecondaryTextLight = Color(0xFF666666)
+val TextPrimaryLight = Color(0xFF111827)
+val TextSecondaryLight = Color(0xFF6B7280)
+val TextTertiaryLight = Color(0xFF9CA3AF)
+
+// Accent
+val AccentBlue = Color(0xFF3B82F6)
+val AccentBlueDark = Color(0xFF2563EB)
