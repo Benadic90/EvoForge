@@ -38,7 +38,7 @@ def run_daily():
     cfg = load_config()
     db = Database(cfg.database.sqlite_path)
     registry = ProjectRegistry(db)
-    gh_client = GitHubClient()
+    gh_client = GitHubClient(db=db)
     scanner = ProjectScanner(db, gh_client, registry)
     priority_engine = PortfolioPriorityEngine(db, registry)
     
