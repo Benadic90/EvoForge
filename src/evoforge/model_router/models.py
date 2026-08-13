@@ -86,3 +86,35 @@ class ModelRegistry:
     def list_all_models(self) -> list[ModelMetadata]:
         """List all models from all registered providers."""
         return list(self._models.values())
+
+
+class AntigravityExecutionRequest(BaseModel):
+    task_id: str
+    workflow_id: str
+    agent_id: str | None = None
+    repository_path: str | None = None
+    branch: str | None = None
+    task_description: str
+    requirements: list[str] = Field(default_factory=list)
+    permissions: list[str] = Field(default_factory=list)
+    dry_run: bool = False
+    timeout_seconds: int = 300
+    working_directory: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class AntigravityExecutionResult(BaseModel):
+    success: bool
+    status: str
+    summary: str
+    duration_ms: float = 0.0
+    error_type: str | None = None
+    error_message_sanitized: str | None = None
+    exit_code: int | None = None
+    session_id: str | None = None
+    executor_id: str
+    provider_id: str = "antigravity"
+    model_id: str | None = None
+    artifacts: list[str] = Field(default_factory=list)
+    changed_files: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)

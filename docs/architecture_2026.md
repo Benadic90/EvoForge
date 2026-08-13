@@ -155,9 +155,11 @@ Candidate models
  |
 Budget + availability + historical metrics
  |
-Selected provider/model
- |
-Execution
+Selected provider/model/executor
+  /          |           \
+LiteLLM    Gemini      Antigravity
+  |          |           |
+Local API  Cloud API  Execution Boundary
  |
 Evaluation
  |

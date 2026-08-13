@@ -1,4 +1,5 @@
 from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -103,3 +104,14 @@ class KnowledgeGraphLink(BaseModel):
 class KnowledgeGraphResponse(BaseModel):
     nodes: list[KnowledgeGraphNode] = Field(default_factory=list)
     links: list[KnowledgeGraphLink] = Field(default_factory=list)
+
+
+class AntigravityStatusResponse(BaseModel):
+    executor_id: str = "antigravity"
+    status: str
+    available: bool
+    runtime_type: str | None = None
+    runtime_version: str | None = None
+    capabilities: list[str] = Field(default_factory=list)
+    reason_unavailable: str | None = None
+    active_sessions: int = 0

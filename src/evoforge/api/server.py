@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from evoforge.agents.factory import build_agent_registry
 from evoforge.api.models import (
     AgentStatusResponse,
+    AntigravityStatusResponse,
     EventResponse,
     ExecutorStatusResponse,
     KnowledgeGraphLink,
@@ -489,6 +490,34 @@ def get_agent_metrics() -> dict[str, Any]:
         "recent_evolutions": recent_evolutions,
     }
 
+
+@app.get("/api/executors/antigravity", response_model=AntigravityStatusResponse)
+def get_antigravity_executor() -> AntigravityStatusResponse:
+    from evoforge.model_router.antigravity_runtime import AntigravityRuntimeDetector
+    info = AntigravityRuntimeDetector.get_runtime_info()
+    caps = [c.value for c in executor_registry.get_capabilities("antigravity")] if "antigravity" in executor_registry.list_all() else []
+    
+    return AntigravityStatusResponse(
+        status="AVAILABLE" if info.available else "UNAVAILABLE",
+        available=info.available,
+        runtime_type=info.runtime_type,
+        runtime_version=info.version,
+        capabilities=caps,
+        reason_unavailable=info.reason_unavailable,
+        active_sessions=0
+    )
+
+
+@app.get("/api/executors/antigravity/status", response_model=AntigravityStatusResponse)
+def get_antigravity_executor_status() -> AntigravityStatusResponse:
+    return get_antigravity_executor()
+
+
+@app.get("/api/executors/antigravity/sessions")
+def get_antigravity_sessions() -> list[Any]:
+    # We do not fake sessions. 
+    # Since there's no runtime yet, there are no real sessions.
+    return []
 
 
 def start_server():

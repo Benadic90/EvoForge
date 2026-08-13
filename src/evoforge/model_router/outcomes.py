@@ -1,5 +1,7 @@
 from typing import Any
+
 from pydantic import BaseModel, Field
+
 
 class ExecutionOutcome(BaseModel):
     """Structured representation of task execution outcomes and engineering verification."""

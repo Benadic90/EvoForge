@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 from evoforge.agents.capabilities import AgentCapability
-from evoforge.agents.contracts import AgentContract, AgentExecutor, AgentResult
+from evoforge.agents.contracts import AgentExecutor, AgentResult
 from evoforge.memory.database import Database
 from evoforge.memory.manager import MemoryManager
 from evoforge.memory.obsidian import ObsidianManager

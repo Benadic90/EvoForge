@@ -92,3 +92,10 @@ class AgentExecutor(ABC):
         """Checks if the executor backend is reachable and configured."""
         return True
 
+    def cancel(self, task_id: str) -> None:
+        """Cancels a currently running execution."""
+
+    def get_status(self, task_id: str) -> str:
+        """Gets the status of a specific execution (e.g., RUNNING, COMPLETED, FAILED, UNAVAILABLE)."""
+        return "UNKNOWN"
+

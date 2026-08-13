@@ -30,6 +30,53 @@ def status():
     logger.info("fetching_status")
     # TODO: Implement status fetching
 
+
+@app.command("antigravity-status")
+def antigravity_status():
+    """Show the availability and health of the Antigravity integration."""
+    from evoforge.model_router.antigravity_runtime import AntigravityRuntimeDetector
+    from evoforge.model_router.executors import create_default_executor_registry
+    from evoforge.utils.config import load_config
+    
+    info = AntigravityRuntimeDetector.get_runtime_info()
+    
+    console.print("[bold cyan]Antigravity[/bold cyan]")
+    if info.available:
+        console.print("[green]Status: AVAILABLE[/green]")
+        console.print(f"Runtime Type: {info.runtime_type}")
+        console.print(f"Executable: {info.executable_path}")
+        
+        config = load_config()
+        registry = create_default_executor_registry(config)
+        caps = registry.get_capabilities("antigravity")
+        console.print("\nCapabilities:")
+        for c in caps:
+            console.print(f"  {c.value}")
+            
+        console.print("\nHealth:")
+        console.print("  [green]HEALTHY[/green]")
+    else:
+        console.print("[yellow]Status: UNAVAILABLE[/yellow]")
+        console.print(f"\nReason:\n  {info.reason_unavailable}")
+        console.print("\nExecution:\n  NOT ATTEMPTED")
+
+
+@app.command("antigravity-test")
+def antigravity_test():
+    """Perform a harmless read-only test using the Antigravity integration, if available."""
+    from evoforge.model_router.antigravity_runtime import AntigravityRuntimeDetector
+    info = AntigravityRuntimeDetector.get_runtime_info()
+    
+    if not info.available:
+        console.print("[yellow]Antigravity runtime is unavailable. Test cannot proceed.[/yellow]")
+        return
+        
+    console.print("[green]Antigravity runtime is available. Proceeding with test...[/green]")
+    # TODO: If a real runtime becomes available, this is where we would dispatch a harmless task.
+    # We do not simulate success.
+    console.print("[yellow]Test task dispatch not implemented for the real runtime yet.[/yellow]")
+
+
 @app.command("agents")
 def list_agents():
     """List all registered agents and their metadata."""

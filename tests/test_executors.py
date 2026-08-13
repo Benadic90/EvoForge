@@ -37,9 +37,9 @@ def test_antigravity_executor_boundary():
     assert result_disabled.success is False
     assert result_disabled.metrics["failure_class"] == "provider_unavailable"
 
-    # When explicitly enabled boundary
+    # When explicitly enabled boundary but runtime is absent
     executor_enabled = AntigravityExecutor(enabled=True)
     result_enabled = executor_enabled.execute(context)
-    assert result_enabled.success is True
-    assert result_enabled.agent_id == "antigravity_executor"
-    assert "latency_ms" in result_enabled.metrics
+    assert result_enabled.success is False
+    assert result_enabled.metrics["failure_class"] == "provider_unavailable"
+    assert "No supported machine-callable runtime" in result_enabled.errors[0]

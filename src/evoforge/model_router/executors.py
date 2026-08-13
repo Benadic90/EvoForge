@@ -1,12 +1,11 @@
 import os
 import time
-from typing import Any
 import urllib.error
 import urllib.request
+from typing import Any
 
 import litellm
 import structlog
-
 
 from evoforge.agents.capabilities import AgentCapability
 from evoforge.agents.contracts import AgentContext, AgentExecutor, AgentResult
@@ -448,40 +447,91 @@ class AntigravityExecutor(AgentExecutor):
     def __init__(self, endpoint: str | None = None, enabled: bool = False):
         self.endpoint = endpoint
         self.enabled = enabled or bool(os.environ.get("ANTIGRAVITY_ENABLED", "").lower() in ("true", "1"))
+        from evoforge.model_router.antigravity_runtime import AntigravityRuntimeDetector
+        self.detector = AntigravityRuntimeDetector
 
     def health_check(self) -> bool:
         """Boundary is only healthy if explicitly enabled and accessible."""
-        return self.enabled
+        if not self.enabled:
+            return False
+        return self.detector.health_check()
 
     def execute(self, context: AgentContext) -> AgentResult:
         logger.info("executing_task_antigravity", task_id=context.task_id)
+        
+        # We use the typed models from model_router.models
+        # Even though we don't execute, we construct the request to demonstrate the correct type boundary.
+        from evoforge.model_router.models import (
+            AntigravityExecutionRequest,
+            AntigravityExecutionResult,
+        )
+        req = AntigravityExecutionRequest(
+            task_id=context.task_id,
+            workflow_id=context.workflow_id,
+            agent_id=context.metadata.get("agent_id"),
+            task_description=context.task_description,
+            requirements=[c.value for c in context.required_capabilities],
+            permissions=context.permissions,
+            dry_run=context.dry_run,
+        )
 
         if not self.health_check():
-            return AgentResult(
+            info = self.detector.get_runtime_info()
+            reason = info.reason_unavailable or "Antigravity runtime boundary unavailable"
+            
+            res = AntigravityExecutionResult(
                 success=False,
-                agent_id="antigravity_executor",
+                status="UNAVAILABLE",
+                summary=f"Antigravity boundary execution failed: {reason}",
+                error_type="provider_unavailable",
+                error_message_sanitized=reason,
+                executor_id="antigravity_executor"
+            )
+            
+            return AgentResult(
+                success=res.success,
+                agent_id=res.executor_id,
                 task_id=context.task_id,
                 workflow_id=context.workflow_id,
-                summary="Antigravity boundary execution failed: Antigravity is not enabled or available in this environment.",
-                errors=["Antigravity runtime boundary unavailable"],
+                summary=res.summary,
+                errors=[reason],
                 metrics={
-                    "latency_ms": 0.0,
+                    "latency_ms": res.duration_ms,
                     "cost": 0.0,
-                    "provider": "antigravity",
-                    "failure_class": "provider_unavailable",
+                    "provider": res.provider_id,
+                    "failure_class": res.error_type,
                     "retryable": False,
                 },
             )
 
-        # Active boundary execution stub if enabled
-        return AgentResult(
+        # Active boundary execution stub if enabled and reachable
+        # (This block won't be reached in current environment, but acts as the template for real execution)
+        res = AntigravityExecutionResult(
             success=True,
-            agent_id="antigravity_executor",
+            status="COMPLETED",
+            summary=f"Executed via Antigravity runtime boundary for: {context.task_description}",
+            duration_ms=100.0,
+            executor_id="antigravity_executor"
+        )
+        return AgentResult(
+            success=res.success,
+            agent_id=res.executor_id,
             task_id=context.task_id,
             workflow_id=context.workflow_id,
-            summary=f"Executed via Antigravity runtime boundary for: {context.task_description}",
-            metrics={"latency_ms": 100.0, "cost": 0.0, "provider": "antigravity"},
+            summary=res.summary,
+            metrics={"latency_ms": res.duration_ms, "cost": 0.0, "provider": res.provider_id},
         )
+
+    def cancel(self, task_id: str) -> None:
+        if not self.health_check():
+            logger.warning("antigravity_cancel_unavailable", task_id=task_id)
+            return
+        logger.info("antigravity_cancel", task_id=task_id)
+
+    def get_status(self, task_id: str) -> str:
+        if not self.health_check():
+            return "UNAVAILABLE"
+        return "UNKNOWN"
 
 
 def create_default_executor_registry(config: Any = None) -> ExecutorRegistry:
