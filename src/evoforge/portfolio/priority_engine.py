@@ -40,8 +40,8 @@ class PortfolioPriorityEngine:
             task = PortfolioTask(
                 task_id=f"ptask_{uuid.uuid4().hex[:8]}",
                 project_id=project_id,
-                title=item.get("title", "Untitled Task"),
-                description=item.get("description", ""),
+                title=item.get("title") or "Untitled Task",
+                description=item.get("description") or "",
                 source=item.get("source", "unknown"),
                 source_id=str(item.get("source_id", uuid.uuid4())),
                 priority=float(item.get("priority_hint", 0.0)),

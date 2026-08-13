@@ -46,7 +46,7 @@ def run_daily():
     for p in registry.list():
         if p.status == "MANAGED":
             console.print(f"Scanning {p.repository_full_name}...")
-            report, raw_items = scanner.scan_project(p.project_id)
+            report, raw_items = scanner.scan_project(p.project_id, force_rescan=True)
             if raw_items:
                 priority_engine.generate_backlog(p.project_id, raw_items)
                 
