@@ -1,7 +1,9 @@
+
 import pytest
-from datetime import UTC, datetime
+
 from evoforge.memory.database import Database
 from evoforge.runtime.scheduler import SchedulerEngine
+
 
 @pytest.fixture
 def db(tmp_path):

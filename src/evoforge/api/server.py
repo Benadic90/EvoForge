@@ -15,6 +15,8 @@ from evoforge.api.models import (
     AntigravityStatusResponse,
     EventResponse,
     ExecutorStatusResponse,
+    GitHubStatusResponse,
+    GitHubTokenUpdate,
     KnowledgeGraphLink,
     KnowledgeGraphNode,
     KnowledgeGraphResponse,
@@ -23,9 +25,12 @@ from evoforge.api.models import (
     TelemetryExecutionResponse,
     TelemetrySummaryResponse,
 )
+from evoforge.github_integration.client import GitHubClient
 from evoforge.memory.database import Database
 from evoforge.memory.events import SQLiteEventStore, emitter
 from evoforge.model_router.executors import create_default_executor_registry
+from evoforge.portfolio.models import ProjectProfile
+from evoforge.portfolio.registry import ProjectRegistry
 from evoforge.runtime.scheduler import SchedulerEngine
 from evoforge.runtime.worker import WorkerHealth, WorkerProfile, WorkerRegistry, WorkerStatus
 from evoforge.utils.config import load_config
@@ -70,6 +75,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.get("/")
+def read_root():
+    return {"status": "EvoForge Control Plane is online.", "docs_url": "/docs"}
 
 @app.get("/api/status", response_model=SystemStatusResponse)
 def get_status() -> SystemStatusResponse:
@@ -652,7 +661,6 @@ from evoforge.portfolio.models import (
     PortfolioRanking,
     PortfolioTask,
     ProjectHealthReport,
-    ProjectProfile,
     ProjectRoadmap,
 )
 
@@ -1020,6 +1028,40 @@ def api_reject_proposal(proposal_id: str):
         return {"status": "success", "message": f"Proposal {proposal_id} rejected."}
     finally:
         conn.close()
+
+@app.put("/api/github/token", dependencies=[Depends(get_worker_token)])
+def set_github_token(update: GitHubTokenUpdate):
+    db.execute("INSERT INTO system_settings (key, value, updated_at) VALUES ('github_pat', ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP", (update.token,))
+    return {"status": "success"}
+
+@app.get("/api/github/status", response_model=GitHubStatusResponse, dependencies=[Depends(get_worker_token)])
+def get_github_status():
+    rows = db.fetchall("SELECT value FROM system_settings WHERE key = 'github_pat'")
+    if not rows or not rows[0]["value"]:
+        token = os.environ.get("GITHUB_TOKEN")
+        if not token:
+            return GitHubStatusResponse(configured=False, username=None)
+    
+    # Optional: Verify token via GitHub API
+    try:
+        client = GitHubClient(db=db)
+        user = client.client.get_user().login
+        return GitHubStatusResponse(configured=True, username=user)
+    except Exception:
+        return GitHubStatusResponse(configured=False, username=None)
+
+@app.get("/api/projects", response_model=list[ProjectProfile], dependencies=[Depends(get_worker_token)])
+def list_projects():
+    registry = ProjectRegistry(db)
+    return registry.list()
+
+@app.get("/api/projects/{project_id}", response_model=ProjectProfile, dependencies=[Depends(get_worker_token)])
+def get_project(project_id: str):
+    registry = ProjectRegistry(db)
+    profile = registry.get(project_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return profile
 
 def start_server():
     """Starts the FastAPI server."""

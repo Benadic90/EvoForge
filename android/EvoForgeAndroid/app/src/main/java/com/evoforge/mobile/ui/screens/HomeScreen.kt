@@ -22,12 +22,40 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evoforge.mobile.ui.theme.*
+import com.evoforge.mobile.viewmodel.ConnectionState
+import com.evoforge.mobile.viewmodel.SystemViewModel
 
 @Composable
-fun HomeScreen() {
+fun HomeScreen(systemViewModel: SystemViewModel) {
+    val connectionState by systemViewModel.connectionState.collectAsState()
+    val systemStatus by systemViewModel.systemStatus.collectAsState()
+    val computePolicy by systemViewModel.computePolicy.collectAsState()
+
+    val isOnline = connectionState is ConnectionState.Online
+    val statusDotColor = when (connectionState) {
+        is ConnectionState.Online -> StatusOnline
+        is ConnectionState.Connecting -> StatusWarning
+        else -> StatusError
+    }
+
+    val controlPlaneStatusStr = when (connectionState) {
+        is ConnectionState.Online -> "ONLINE"
+        is ConnectionState.Connecting -> "CONNECTING"
+        is ConnectionState.NotConfigured -> "NOT CONFIGURED"
+        is ConnectionState.Offline -> "OFFLINE"
+    }
+
+    val controlPlaneColor = when (connectionState) {
+        is ConnectionState.Online -> StatusOnline
+        is ConnectionState.Connecting -> StatusWarning
+        is ConnectionState.NotConfigured -> TextTertiaryDark
+        is ConnectionState.Offline -> StatusError
+    }
+
+    val computeModeStr = computePolicy?.mode ?: systemStatus?.compute_mode ?: "UNKNOWN"
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -45,7 +73,7 @@ fun HomeScreen() {
                 modifier = Modifier
                     .size(10.dp)
                     .clip(CircleShape)
-                    .background(StatusOnline)
+                    .background(statusDotColor)
             )
             Spacer(modifier = Modifier.width(10.dp))
             Text(
@@ -71,22 +99,22 @@ fun HomeScreen() {
         SystemStatusRow(
             icon = Icons.Outlined.Cloud,
             label = "Control Plane",
-            status = "NOT CONFIGURED",
-            statusColor = TextTertiaryDark
+            status = controlPlaneStatusStr,
+            statusColor = controlPlaneColor
         )
         Spacer(modifier = Modifier.height(8.dp))
         SystemStatusRow(
             icon = Icons.Outlined.Schedule,
             label = "Scheduler",
-            status = "UNKNOWN",
-            statusColor = TextTertiaryDark
+            status = if (isOnline) systemStatus?.system_state?.uppercase() ?: "UNKNOWN" else "UNKNOWN",
+            statusColor = if (isOnline) StatusOnline else TextTertiaryDark
         )
         Spacer(modifier = Modifier.height(8.dp))
         SystemStatusRow(
             icon = Icons.Outlined.Memory,
             label = "Compute Mode",
-            status = "HYBRID",
-            statusColor = StatusInfo
+            status = computeModeStr,
+            statusColor = if (isOnline) StatusInfo else TextTertiaryDark
         )
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -106,16 +134,16 @@ fun HomeScreen() {
             StatCard(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Rounded.PlayArrow,
-                value = "0",
+                value = if (isOnline) "${systemStatus?.active_workflows ?: 0}" else "-",
                 label = "Workflows",
-                accentColor = StatusRunning
+                accentColor = if (isOnline) StatusRunning else TextTertiaryDark
             )
             StatCard(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Rounded.CheckCircle,
-                value = "0",
-                label = "Tasks Queued",
-                accentColor = StatusOnline
+                value = if (isOnline) "${systemStatus?.complete_workflows ?: 0}" else "-",
+                label = "Completed",
+                accentColor = if (isOnline) StatusOnline else TextTertiaryDark
             )
         }
         Spacer(modifier = Modifier.height(12.dp))
@@ -126,16 +154,16 @@ fun HomeScreen() {
             StatCard(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Rounded.Storage,
-                value = "0",
-                label = "Workers",
-                accentColor = StatusInfo
+                value = if (isOnline) "${systemStatus?.healthy_executors ?: 0}" else "-",
+                label = "Healthy Execs",
+                accentColor = if (isOnline) StatusInfo else TextTertiaryDark
             )
             StatCard(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Rounded.Groups,
-                value = "0",
-                label = "Agents",
-                accentColor = StatusWarning
+                value = if (isOnline) "${systemStatus?.unhealthy_executors ?: 0}" else "-",
+                label = "Unhealthy",
+                accentColor = if (isOnline) StatusWarning else TextTertiaryDark
             )
         }
 
@@ -161,17 +189,37 @@ fun HomeScreen() {
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    "No recent events",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    "Configure your Control Plane in Settings",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextTertiaryDark
-                )
+                if (connectionState is ConnectionState.NotConfigured) {
+                    Text(
+                        "No connection",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Configure your Control Plane in Settings",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextTertiaryDark
+                    )
+                } else if (connectionState is ConnectionState.Offline) {
+                    Text(
+                        "Connection Error",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = StatusError
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        (connectionState as ConnectionState.Offline).reason,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextTertiaryDark
+                    )
+                } else {
+                    Text(
+                        "No recent events",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }

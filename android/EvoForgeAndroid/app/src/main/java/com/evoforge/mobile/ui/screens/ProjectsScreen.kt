@@ -11,30 +11,21 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evoforge.mobile.ui.theme.*
-
-data class MockProject(
-    val name: String,
-    val status: String,
-    val health: Int,
-    val openTasks: Int
-)
+import com.evoforge.mobile.viewmodel.SystemViewModel
+import com.evoforge.mobile.data.model.ProjectResponse
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProjectsScreen() {
-    val projects = remember {
-        listOf(
-            MockProject("EvoForge", "MANAGED", 87, 3),
-            MockProject("TradingBot", "MANAGED", 72, 5),
-            MockProject("SamsungNotes", "DISCOVERED", 45, 12)
-        )
-    }
+fun ProjectsScreen(systemViewModel: SystemViewModel) {
+    val projects by systemViewModel.projects.collectAsState()
 
     Column(
         modifier = Modifier
@@ -55,31 +46,46 @@ fun ProjectsScreen() {
             )
         }
 
-        LazyColumn(
-            contentPadding = PaddingValues(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(projects) { project ->
-                ProjectRow(project)
+        if (projects.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    "No projects discovered.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(projects) { project ->
+                    ProjectRow(project)
+                }
             }
         }
     }
 }
 
 @Composable
-fun ProjectRow(project: MockProject) {
-    val healthColor = when {
-        project.health >= 80 -> StatusOnline
-        project.health >= 50 -> StatusWarning
-        else -> StatusError
+fun ProjectRow(project: ProjectResponse) {
+    val healthColor = when (project.health.uppercase()) {
+        "HEALTHY" -> StatusOnline
+        "WARNING" -> StatusWarning
+        "CRITICAL" -> StatusError
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surface,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        onClick = { }
+        onClick = { 
+            android.widget.Toast.makeText(context, "${project.name} details coming in Phase 10!", android.widget.Toast.LENGTH_SHORT).show()
+        }
     ) {
         Row(
             modifier = Modifier
@@ -143,13 +149,13 @@ fun ProjectRow(project: MockProject) {
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        "Health ${project.health}%",
+                        project.health.lowercase().replaceFirstChar { it.uppercase() },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.width(16.dp))
                     Text(
-                        "${project.openTasks} open tasks",
+                        "Priority: ${String.format(java.util.Locale.US, "%.1f", project.priority_score)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

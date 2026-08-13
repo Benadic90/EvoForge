@@ -117,3 +117,12 @@ class AntigravityStatusResponse(BaseModel):
     capabilities: list[str] = Field(default_factory=list)
     reason_unavailable: str | None = None
     active_sessions: int = 0
+
+
+class GitHubTokenUpdate(BaseModel):
+    token: str
+
+
+class GitHubStatusResponse(BaseModel):
+    configured: bool
+    username: str | None = None

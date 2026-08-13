@@ -1,7 +1,7 @@
 from evoforge.agents.capabilities import AgentCapability
 from evoforge.model_router.executors import ExecutorRegistry, GeminiExecutor, LocalModelExecutor
-from evoforge.model_router.routing import ExecutorRouter
 from evoforge.model_router.requirements import TaskRequirements
+from evoforge.model_router.routing import ExecutorRouter
 from evoforge.runtime.worker import WorkerProfile, WorkerType
 
 

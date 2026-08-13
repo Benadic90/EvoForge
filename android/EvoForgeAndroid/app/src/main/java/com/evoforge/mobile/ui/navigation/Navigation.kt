@@ -15,15 +15,17 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.evoforge.mobile.core.auth.AuthManager
 import com.evoforge.mobile.ui.screens.HomeScreen
 import com.evoforge.mobile.ui.screens.ProjectsScreen
 import com.evoforge.mobile.ui.screens.SettingsScreen
+import com.evoforge.mobile.viewmodel.SystemViewModel
 
 data class NavItem(val route: String, val label: String, val icon: ImageVector)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EvoForgeNavGraph() {
+fun EvoForgeNavGraph(systemViewModel: SystemViewModel, authManager: AuthManager) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -79,9 +81,9 @@ fun EvoForgeNavGraph() {
             startDestination = "home",
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable("home") { HomeScreen() }
-            composable("projects") { ProjectsScreen() }
-            composable("settings") { SettingsScreen() }
+            composable("home") { HomeScreen(systemViewModel) }
+            composable("projects") { ProjectsScreen(systemViewModel) }
+            composable("settings") { SettingsScreen(systemViewModel, authManager) }
         }
     }
 }

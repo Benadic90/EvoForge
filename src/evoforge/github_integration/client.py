@@ -6,9 +6,23 @@ from github.GithubException import GithubException
 
 logger = structlog.get_logger(__name__)
 
+from evoforge.memory.database import Database
+
+
 class GitHubClient:
-    def __init__(self, token: str | None = None):
-        self.token = token or os.environ.get("GITHUB_TOKEN")
+    def __init__(self, token: str | None = None, db: Database | None = None):
+        self.token = token
+        
+        # Try to get from DB if not explicitly passed
+        if not self.token and db is not None:
+            rows = db.fetchall("SELECT value FROM system_settings WHERE key = 'github_pat'")
+            if rows and rows[0]["value"]:
+                self.token = rows[0]["value"]
+                
+        # Fallback to env var
+        if not self.token:
+            self.token = os.environ.get("GITHUB_TOKEN")
+            
         if not self.token:
             logger.warning("github_token_missing")
             self.client = Github() # Unauthenticated (highly rate limited)
