@@ -132,6 +132,15 @@ def run_daily():
             # Update task status
             db.execute("UPDATE portfolio_tasks SET status = 'RUNNING' WHERE task_id = ?", (task_id,))
             
+            # Must insert into workflows so lease can be acquired
+            import json
+            import time
+            state_snapshot = json.dumps({"workflow_id": wdef.id, "run_id": f"run_{int(time.time())}", "repository_id": repo_name, "current_stage": "INITIALIZE", "dry_run": False, "attempt_count": 0, "history": []})
+            db.execute(
+                "INSERT INTO workflows (id, project, workflow_type, task_description, status, state_snapshot) VALUES (?, ?, ?, ?, 'pending', ?) ON CONFLICT(id) DO NOTHING",
+                (wdef.id, ptask.project_id, "portfolio_task", ptask.title, state_snapshot)
+            )
+            
             orchestrator.execute_workflow(wdef)
             
             # Since execute_workflow is blocking for bounded execution, we can check state afterwards
