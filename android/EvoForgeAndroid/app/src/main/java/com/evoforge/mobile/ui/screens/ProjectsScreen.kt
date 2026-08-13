@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.FolderOpen
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
@@ -36,7 +37,7 @@ fun ProjectsScreen(systemViewModel: SystemViewModel) {
                 onClick = { showAddDialog = true },
                 containerColor = MaterialTheme.colorScheme.primary
             ) {
-                Icon(androidx.compose.material.icons.Icons.Rounded.Add, contentDescription = "Add Project")
+                Icon(Icons.Rounded.Add, contentDescription = "Add Project")
             }
         }
     ) { innerPadding ->
