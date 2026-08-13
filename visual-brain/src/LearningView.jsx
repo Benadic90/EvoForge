@@ -1,105 +1,99 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { api } from './api/client';
+import { BookOpen, Search, Target, CheckCircle, Database } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8000/api';
-
-const LearningView = () => {
+export default function LearningView() {
   const [research, setResearch] = useState([]);
   const [skills, setSkills] = useState([]);
   const [gaps, setGaps] = useState([]);
-  const [benchmarks, setBenchmarks] = useState([]);
-  const [proposals, setProposals] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API_BASE}/learning/research`).then(res => res.json()).then(setResearch).catch(console.error);
-    fetch(`${API_BASE}/learning/skills`).then(res => res.json()).then(setSkills).catch(console.error);
-    fetch(`${API_BASE}/learning/gaps`).then(res => res.json()).then(setGaps).catch(console.error);
-    fetch(`${API_BASE}/learning/benchmarks`).then(res => res.json()).then(setBenchmarks).catch(console.error);
-    fetch(`${API_BASE}/evolution/proposals`).then(res => res.json()).then(setProposals).catch(console.error);
+    const fetchLearning = async () => {
+      try {
+        const [rRes, sRes, gRes] = await Promise.all([
+          api.getResearch(),
+          api.getSkills(),
+          api.getSkillGaps()
+        ]);
+        setResearch(rRes || []);
+        setSkills(sRes || []);
+        setGaps(gRes || []);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchLearning();
   }, []);
 
+  if (loading) {
+    return <div className="p-8 text-[var(--text-muted)] text-center">Loading Learning & Skills...</div>;
+  }
+
   return (
-    <div style={{ padding: '2rem', color: '#e5e7eb' }}>
-      <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '1.5rem', borderBottom: '1px solid #374151', paddingBottom: '0.5rem' }}>Continuous Learning & Skill Evolution</h1>
-      
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
-        
-        {/* Research Jobs */}
-        <div style={{ backgroundColor: '#1f2937', padding: '1.5rem', borderRadius: '0.5rem', border: '1px solid #374151' }}>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#60a5fa' }}>Research Jobs</h2>
-          {research.length === 0 ? <p>No active research jobs.</p> : (
-            <ul style={{ listStyle: 'none', padding: 0 }}>
-              {research.map(r => (
-                <li key={r.research_id} style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: '#374151', borderRadius: '0.25rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <strong>{r.topic}</strong>
-                    <span style={{ padding: '0.25rem 0.5rem', backgroundColor: r.status === 'COMPLETED' ? '#065f46' : '#b45309', borderRadius: '0.25rem', fontSize: '0.8rem' }}>{r.status}</span>
+    <div className="p-8 fade-in">
+      <h1 style={{ fontSize: '24px', margin: '0 0 24px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <BookOpen size={24} />
+        Continuous Learning & Skills
+      </h1>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+        <div className="glass-panel" style={{ padding: '24px' }}>
+          <h2 style={{ fontSize: '18px', margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px' }}><CheckCircle size={18} /> Acquired Skills</h2>
+          {skills.length === 0 ? (
+            <div style={{ color: 'var(--text-muted)' }}>No skills documented yet.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {skills.map(s => (
+                <div key={s.skill_id} style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <strong style={{ fontSize: '15px' }}>{s.skill_id}</strong>
+                    <span style={{ fontSize: '11px', color: '#00ffaa' }}>{(s.confidence * 100).toFixed(0)}% Confidence</span>
                   </div>
-                  <div style={{ fontSize: '0.9rem', color: '#9ca3af' }}>Agent: {r.agent_id} | Priority: {r.priority}</div>
-                </li>
+                  <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{s.description}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' }}>Based on {s.evidence_count} evidence points.</div>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
         </div>
 
-        {/* Skill Gaps */}
-        <div style={{ backgroundColor: '#1f2937', padding: '1.5rem', borderRadius: '0.5rem', border: '1px solid #374151' }}>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#f87171' }}>Identified Skill Gaps</h2>
-          {gaps.length === 0 ? <p>No active skill gaps.</p> : (
-            <ul style={{ listStyle: 'none', padding: 0 }}>
-              {gaps.map(g => (
-                <li key={g.skill_gap_id} style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: '#374151', borderRadius: '0.25rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <strong>{g.skill_id}</strong>
-                    <span style={{ padding: '0.25rem 0.5rem', backgroundColor: '#7f1d1d', borderRadius: '0.25rem', fontSize: '0.8rem' }}>{g.severity}</span>
+        <div>
+          <div className="glass-panel" style={{ padding: '24px', marginBottom: '24px' }}>
+            <h2 style={{ fontSize: '18px', margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px' }}><Target size={18} /> Identified Gaps</h2>
+            {gaps.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)' }}>No skill gaps identified.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {gaps.map(g => (
+                  <div key={g.gap_id} style={{ background: 'rgba(255,170,0,0.1)', border: '1px solid rgba(255,170,0,0.2)', padding: '12px', borderRadius: '8px' }}>
+                    <strong style={{ color: '#ffaa00', fontSize: '14px', display: 'block', marginBottom: '4px' }}>{g.topic}</strong>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{g.reason}</div>
                   </div>
-                  <div style={{ fontSize: '0.9rem', color: '#9ca3af' }}>Status: {g.status} | Confidence: {g.confidence.toFixed(2)}</div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+                ))}
+              </div>
+            )}
+          </div>
 
-        {/* Benchmarks */}
-        <div style={{ backgroundColor: '#1f2937', padding: '1.5rem', borderRadius: '0.5rem', border: '1px solid #374151' }}>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#34d399' }}>Benchmark Runs</h2>
-          {benchmarks.length === 0 ? <p>No benchmarks recorded.</p> : (
-            <ul style={{ listStyle: 'none', padding: 0 }}>
-              {benchmarks.map(b => (
-                <li key={b.benchmark_id} style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: '#374151', borderRadius: '0.25rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <strong>{b.skill_id}</strong>
-                    <span style={{ color: b.candidate_score >= b.baseline_score ? '#34d399' : '#f87171' }}>
-                      {b.candidate_score.toFixed(2)} (Base: {b.baseline_score.toFixed(2)})
-                    </span>
+          <div className="glass-panel" style={{ padding: '24px' }}>
+            <h2 style={{ fontSize: '18px', margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px' }}><Search size={18} /> Active Research</h2>
+            {research.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)' }}>No active research jobs.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {research.map(r => (
+                  <div key={r.job_id} style={{ background: 'rgba(0,240,255,0.05)', border: '1px solid rgba(0,240,255,0.1)', padding: '12px', borderRadius: '8px' }}>
+                    <strong style={{ color: '#00f0ff', fontSize: '14px', display: 'block', marginBottom: '4px' }}>{r.topic}</strong>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Status: {r.status}</div>
                   </div>
-                  <div style={{ fontSize: '0.9rem', color: '#9ca3af' }}>Agent: {b.agent_id} | Env: {b.environment}</div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {/* Proposals */}
-        <div style={{ backgroundColor: '#1f2937', padding: '1.5rem', borderRadius: '0.5rem', border: '1px solid #374151' }}>
-          <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem', color: '#c084fc' }}>Evolution Proposals</h2>
-          {proposals.length === 0 ? <p>No proposals available.</p> : (
-            <ul style={{ listStyle: 'none', padding: 0 }}>
-              {proposals.map(p => (
-                <li key={p.proposal_id} style={{ marginBottom: '1rem', padding: '1rem', backgroundColor: '#374151', borderRadius: '0.25rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <strong>{p.target}</strong>
-                    <span style={{ padding: '0.25rem 0.5rem', backgroundColor: '#4c1d95', borderRadius: '0.25rem', fontSize: '0.8rem' }}>{p.status}</span>
-                  </div>
-                  <div style={{ fontSize: '0.9rem', color: '#9ca3af' }}>Type: {p.change_type} | Risk: {p.risk}</div>
-                  <p style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>{p.description}</p>
-                </li>
-              ))}
-            </ul>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
-};
-
-export default LearningView;
+}

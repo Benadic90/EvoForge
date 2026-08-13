@@ -1,16 +1,16 @@
-import { LayoutDashboard, Users, Share2, Database, Rocket, Settings, BrainCircuit, Layers, BookOpen, Activity } from 'lucide-react';
+import { LayoutDashboard, Users, Share2, Database, Rocket, Settings, BrainCircuit, Layers, BookOpen, Activity, Cpu, Network, ListTree, ActivitySquare } from 'lucide-react';
 
 export default function Sidebar({ activeTab, setActiveTab }) {
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'portfolio', label: 'Portfolio', icon: Layers },
-    { id: 'learning', label: 'Continuous Learning', icon: BookOpen },
-    { id: 'evolution', label: 'Self-Evolution', icon: Rocket },
-    { id: 'runtime', label: 'Cloud Runtime', icon: Activity },
     { id: 'agents', label: 'Agent Hub', icon: Users },
-    { id: 'network', label: 'Network Graph', icon: Share2 },
-    { id: 'knowledge', label: 'Knowledge Base', icon: Database },
-    { id: 'deployments', label: 'Deployments', icon: Rocket },
+    { id: 'workers', label: 'Worker Fleet', icon: ActivitySquare },
+    { id: 'executors', label: 'Executors & Models', icon: Cpu },
+    { id: 'routing', label: 'Routing Decisions', icon: Network },
+    { id: 'learning', label: 'Learning & Skills', icon: BookOpen },
+    { id: 'evolution', label: 'Evolution & Testing', icon: Rocket },
+    { id: 'events', label: 'Event Stream', icon: ListTree },
     { id: 'settings', label: 'Settings', icon: Settings }
   ];
 
