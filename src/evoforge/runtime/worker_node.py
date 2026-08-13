@@ -79,10 +79,12 @@ class BaseWorkerNode:
     def _build_workflow_definition(self, workflow_data: dict) -> WorkflowDefinition:
         tasks = []
         for t in workflow_data.get("tasks", []):
+            from evoforge.orchestrator.workflows import TaskPriority
             tasks.append(WorkflowTask(
-                task_id=t["id"],
+                id=t["id"],
+                name=t.get("name", "Unnamed Task"),
                 description=t["description"],
-                required_capabilities=t.get("required_capabilities", []),
+                priority=TaskPriority.MEDIUM,
                 agent_type=t.get("agent_type", "developer")
             ))
         return WorkflowDefinition(

@@ -124,10 +124,13 @@ class SchedulerEngine:
 
             req = PortfolioTaskRequirementsBuilder.build(ptask)
             
+            from evoforge.orchestrator.workflows import TaskPriority
             wtask = WorkflowTask(
-                task_id=req.task_id,
-                description=ptask.title,
-                required_capabilities=req.required_capabilities,
+                id=req.task_id,
+                name=ptask.title,
+                description=ptask.description,
+                priority=TaskPriority.MEDIUM,
+                agent_type="developer",
             )
             
             repo_name = ptask.repository_full_name or "unknown/repo"
