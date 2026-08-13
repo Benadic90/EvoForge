@@ -362,6 +362,127 @@ fun SettingsScreen(systemViewModel: SystemViewModel, authManager: AuthManager) {
 
         Spacer(modifier = Modifier.height(32.dp))
 
+        // AI PROVIDERS CONFIGURATION
+        Text(
+            "AI PROVIDERS",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        ) {
+            val llmKeyStatus by systemViewModel.llmKeyStatus.collectAsState()
+            var geminiToken by remember { mutableStateOf("") }
+            var nvidiaToken by remember { mutableStateOf("") }
+            
+            Column(modifier = Modifier.padding(16.dp)) {
+                // Gemini Provider
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        androidx.compose.material.icons.Icons.Outlined.Token,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        "Google Gemini API Key",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = geminiToken,
+                        onValueChange = { geminiToken = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = {
+                            Text(
+                                if (llmKeyStatus?.gemini_configured == true) "Configured (Enter new to replace)" else "Enter Gemini Key",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp),
+                        visualTransformation = PasswordVisualTransformation(),
+                        textStyle = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Button(
+                        onClick = {
+                            if (geminiToken.isNotBlank()) {
+                                systemViewModel.updateLLMKey("gemini", geminiToken)
+                                geminiToken = ""
+                            }
+                        },
+                        enabled = geminiToken.isNotBlank() && connectionState is ConnectionState.Online,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Text("Save", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+                Divider(color = MaterialTheme.colorScheme.outline)
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // NVIDIA Provider
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        androidx.compose.material.icons.Icons.Outlined.Token,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        "NVIDIA Cloud API Key",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = nvidiaToken,
+                        onValueChange = { nvidiaToken = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = {
+                            Text(
+                                if (llmKeyStatus?.nvidia_configured == true) "Configured (Enter new to replace)" else "Enter NVIDIA Key",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp),
+                        visualTransformation = PasswordVisualTransformation(),
+                        textStyle = MaterialTheme.typography.bodyMedium
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Button(
+                        onClick = {
+                            if (nvidiaToken.isNotBlank()) {
+                                systemViewModel.updateLLMKey("nvidia", nvidiaToken)
+                                nvidiaToken = ""
+                            }
+                        },
+                        enabled = nvidiaToken.isNotBlank() && connectionState is ConnectionState.Online,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Text("Save", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
         // About
         Text(
             "ABOUT",

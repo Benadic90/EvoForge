@@ -39,4 +39,10 @@ interface ApiService {
 
     @GET("api/events/recent")
     suspend fun getRecentEvents(@Query("limit") limit: Int = 20): Response<List<EventResponse>>
+
+    @PUT("api/llm/keys")
+    suspend fun updateLLMKey(@Body update: LLMKeyUpdate): Response<Unit>
+
+    @GET("api/llm/keys/status")
+    suspend fun getLLMKeyStatus(): Response<LLMKeyStatusResponse>
 }

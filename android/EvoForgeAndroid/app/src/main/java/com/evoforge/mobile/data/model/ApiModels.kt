@@ -61,6 +61,18 @@ data class GitHubStatusResponse(
 )
 
 @Serializable
+data class LLMKeyUpdate(
+    val provider: String,
+    val api_key: String
+)
+
+@Serializable
+data class LLMKeyStatusResponse(
+    val gemini_configured: Boolean,
+    val nvidia_configured: Boolean
+)
+
+@Serializable
 data class EventResponse(
     val event_id: String,
     val timestamp: String,

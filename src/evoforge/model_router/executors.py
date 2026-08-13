@@ -9,6 +9,7 @@ import structlog
 
 from evoforge.agents.capabilities import AgentCapability
 from evoforge.agents.contracts import AgentContext, AgentExecutor, AgentResult
+from evoforge.memory.database import Database
 
 logger = structlog.get_logger(__name__)
 
@@ -204,15 +205,24 @@ class GeminiExecutor(AgentExecutor):
 
     def __init__(
         self,
+        db: Database | None = None,
         model_id: str = "gemini/gemini-2.5-flash",
         timeout_seconds: float = 60.0,
     ):
+        self.db = db
         self.model_id = model_id
         self.timeout_seconds = timeout_seconds
 
+    def _get_api_key(self) -> str | None:
+        if self.db:
+            rows = self.db.fetchall("SELECT value FROM system_settings WHERE key = 'gemini_api_key'")
+            if rows and rows[0]["value"]:
+                return rows[0]["value"]
+        return os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+
     def health_check(self) -> bool:
         """Checks if Gemini API credentials exist."""
-        return bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
+        return bool(self._get_api_key())
 
     def execute(self, context: AgentContext) -> AgentResult:
         logger.info("executing_task_gemini", task_id=context.task_id, model=self.model_id)
@@ -235,7 +245,7 @@ class GeminiExecutor(AgentExecutor):
                 },
             )
 
-        api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        api_key = self._get_api_key()
         if not api_key:
             return AgentResult(
                 success=False,
@@ -321,17 +331,26 @@ class NvidiaExecutor(AgentExecutor):
 
     def __init__(
         self,
+        db: Database | None = None,
         model_id: str = "deepseek-ai/deepseek-coder-33b-instruct",
         endpoint: str = "https://integrate.api.nvidia.com/v1",
         timeout_seconds: float = 60.0,
     ):
+        self.db = db
         self.model_id = model_id
         self.endpoint = endpoint
         self.timeout_seconds = timeout_seconds
 
+    def _get_api_key(self) -> str | None:
+        if self.db:
+            rows = self.db.fetchall("SELECT value FROM system_settings WHERE key = 'nvidia_api_key'")
+            if rows and rows[0]["value"]:
+                return rows[0]["value"]
+        return os.environ.get("NVIDIA_API_KEY")
+
     def health_check(self) -> bool:
         """Checks if NVIDIA API credentials exist."""
-        return bool(os.environ.get("NVIDIA_API_KEY"))
+        return bool(self._get_api_key())
 
     def execute(self, context: AgentContext) -> AgentResult:
         logger.info("executing_task_nvidia", task_id=context.task_id, model=self.model_id)
@@ -354,7 +373,7 @@ class NvidiaExecutor(AgentExecutor):
                 },
             )
 
-        api_key = os.environ.get("NVIDIA_API_KEY")
+        api_key = self._get_api_key()
         if not api_key:
             return AgentResult(
                 success=False,
@@ -534,7 +553,7 @@ class AntigravityExecutor(AgentExecutor):
         return "UNKNOWN"
 
 
-def create_default_executor_registry(config: Any = None) -> ExecutorRegistry:
+def create_default_executor_registry(config: Any = None, db: Database | None = None) -> ExecutorRegistry:
     """Builds and registers standard execution backends."""
     registry = ExecutorRegistry()
 
@@ -553,24 +572,20 @@ def create_default_executor_registry(config: Any = None) -> ExecutorRegistry:
 
     # Gemini
     gem_mod = config.providers.gemini.default_model if (config and hasattr(config, "providers")) else None
-    registry.register(
-        "gemini",
-        GeminiExecutor(model_id=gem_mod),
-        [
-            AgentCapability.CODING,
-            AgentCapability.REASONING,
-            AgentCapability.REFACTORING,
-            AgentCapability.MULTI_FILE_EDITING,
-            AgentCapability.REPO_NAVIGATION,
-        ],
-    )
+    registry.register("gemini", GeminiExecutor(db=db, model_id=gem_mod if gem_mod else "gemini/gemini-2.5-flash"), [
+        AgentCapability.CODING,
+        AgentCapability.REASONING,
+        AgentCapability.REFACTORING,
+        AgentCapability.MULTI_FILE_EDITING,
+        AgentCapability.REPO_NAVIGATION,
+    ])
 
     # NVIDIA
     nvid_mod = config.providers.nvidia.default_model if (config and hasattr(config, "providers")) else None
     nvid_ep = config.providers.nvidia.endpoint if (config and hasattr(config, "providers")) else None
     registry.register(
         "nvidia",
-        NvidiaExecutor(model_id=nvid_mod, endpoint=nvid_ep),
+        NvidiaExecutor(model_id=nvid_mod, endpoint=nvid_ep, db=db),
         [
             AgentCapability.CODING,
             AgentCapability.REASONING,

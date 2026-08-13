@@ -11,6 +11,8 @@ import com.evoforge.mobile.data.model.ComputePolicyUpdate
 import com.evoforge.mobile.data.model.SystemStatusResponse
 import com.evoforge.mobile.data.model.ProjectResponse
 import com.evoforge.mobile.data.model.GitHubStatusResponse
+import com.evoforge.mobile.data.model.LLMKeyStatusResponse
+import com.evoforge.mobile.data.model.LLMKeyUpdate
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -42,6 +44,9 @@ class SystemViewModel(private val authManager: AuthManager) : ViewModel() {
 
     private val _githubStatus = MutableStateFlow<GitHubStatusResponse?>(null)
     val githubStatus: StateFlow<GitHubStatusResponse?> = _githubStatus.asStateFlow()
+
+    private val _llmKeyStatus = MutableStateFlow<LLMKeyStatusResponse?>(null)
+    val llmKeyStatus: StateFlow<LLMKeyStatusResponse?> = _llmKeyStatus.asStateFlow()
 
     private var apiService: ApiService? = null
 
@@ -194,6 +199,35 @@ class SystemViewModel(private val authManager: AuthManager) : ViewModel() {
         }
     }
 
+    fun updateLLMKey(provider: String, apiKey: String) {
+        viewModelScope.launch {
+            apiService?.let { api ->
+                try {
+                    val update = LLMKeyUpdate(provider, apiKey)
+                    val response = api.updateLLMKey(update)
+                    if (response.isSuccessful) {
+                        fetchLLMKeyStatus()
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+    }
+
+    private suspend fun fetchLLMKeyStatus() {
+        apiService?.let { api ->
+            try {
+                val response = api.getLLMKeyStatus()
+                if (response.isSuccessful) {
+                    _llmKeyStatus.value = response.body()
+                }
+            } catch (e: Exception) {
+                // Ignore
+            }
+        }
+    }
+
     private fun startPolling() {
         viewModelScope.launch {
             while (isActive) {
@@ -201,6 +235,7 @@ class SystemViewModel(private val authManager: AuthManager) : ViewModel() {
                     fetchStatus()
                     fetchComputePolicy()
                     fetchGitHubStatus()
+                    fetchLLMKeyStatus()
                     fetchProjects()
                 }
                 delay(5000) // Poll every 5s

@@ -126,3 +126,13 @@ class GitHubTokenUpdate(BaseModel):
 class GitHubStatusResponse(BaseModel):
     configured: bool
     username: str | None = None
+
+
+class LLMKeyUpdate(BaseModel):
+    provider: str
+    api_key: str
+
+class LLMKeyStatusResponse(BaseModel):
+    gemini_configured: bool
+    nvidia_configured: bool
+

@@ -17,6 +17,8 @@ from evoforge.api.models import (
     ExecutorStatusResponse,
     GitHubStatusResponse,
     GitHubTokenUpdate,
+    LLMKeyUpdate,
+    LLMKeyStatusResponse,
     KnowledgeGraphLink,
     KnowledgeGraphNode,
     KnowledgeGraphResponse,
@@ -47,7 +49,7 @@ config = load_config()
 db = Database(config.database.sqlite_path)
 emitter.store = SQLiteEventStore(db)
 agent_registry = build_agent_registry(None, None)
-executor_registry = create_default_executor_registry(config)
+executor_registry = create_default_executor_registry(config, db)
 worker_registry = WorkerRegistry(db)
 scheduler = SchedulerEngine(db, None, None)
 
@@ -1043,6 +1045,25 @@ def get_github_status():
             return GitHubStatusResponse(configured=False, username=None)
     
     # Optional: Verify token via GitHub API
+
+@app.put("/api/llm/keys", dependencies=[Depends(get_worker_token)])
+def set_llm_key(update: LLMKeyUpdate):
+    db_key = f"{update.provider.lower()}_api_key"
+    db.execute("INSERT INTO system_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP", (db_key, update.api_key))
+    return {"status": "success"}
+
+@app.get("/api/llm/keys/status", response_model=LLMKeyStatusResponse, dependencies=[Depends(get_worker_token)])
+def get_llm_key_status():
+    rows = db.fetchall("SELECT key, value FROM system_settings WHERE key IN ('gemini_api_key', 'nvidia_api_key')")
+    configured = {r["key"]: bool(r["value"]) for r in rows}
+    
+    gem_env = bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
+    nvi_env = bool(os.environ.get("NVIDIA_API_KEY"))
+    
+    return LLMKeyStatusResponse(
+        gemini_configured=configured.get("gemini_api_key", False) or gem_env,
+        nvidia_configured=configured.get("nvidia_api_key", False) or nvi_env
+    )
     try:
         client = GitHubClient(db=db)
         user = client.client.get_user().login
