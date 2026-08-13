@@ -5,6 +5,7 @@ export default function Sidebar({ activeTab, setActiveTab }) {
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'portfolio', label: 'Portfolio', icon: Layers },
     { id: 'learning', label: 'Continuous Learning', icon: BookOpen },
+    { id: 'evolution', label: 'Self-Evolution', icon: Rocket },
     { id: 'agents', label: 'Agent Hub', icon: Users },
     { id: 'network', label: 'Network Graph', icon: Share2 },
     { id: 'knowledge', label: 'Knowledge Base', icon: Database },

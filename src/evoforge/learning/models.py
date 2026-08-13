@@ -8,10 +8,10 @@ KnowledgeFreshness = Literal["FRESH", "STALE", "EXPIRED", "UNKNOWN"]
 KnowledgeVerificationStatus = Literal["VERIFIED", "LIKELY_VALID", "LOW_CONFIDENCE", "UNVERIFIED", "CONFLICTED", "EXPIRED", "REJECTED"]
 ResearchStatus = Literal["QUEUED", "RUNNING", "COMPLETED", "FAILED", "CANCELLED", "NEEDS_REVIEW"]
 PracticeStatus = Literal["DRAFT", "ACTIVE", "COMPLETED", "FAILED", "EVALUATING"]
-EvolutionStatus = Literal["PROPOSED", "TESTING", "PASSED", "FAILED", "APPROVED", "REJECTED", "DEPLOYED", "ROLLED_BACK"]
+EvolutionStatus = Literal["PROPOSED", "QUEUED", "TESTING", "PASSED", "FAILED", "REJECTED", "APPROVED", "DEPLOYED", "ROLLED_BACK", "PAUSED"]
+EvolutionTarget = Literal["PROMPT", "SKILL", "ROUTING_POLICY", "AGENT_CONFIG", "WORKFLOW_STRATEGY", "TOOL_STRATEGY", "RESEARCH_STRATEGY", "PLANNING_STRATEGY", "EVALUATION_STRATEGY"]
 SkillGapSeverity = Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 SkillGapStatus = Literal["OPEN", "IN_PRACTICE", "RESOLVED", "IGNORED"]
-
 class ResearchJob(BaseModel):
     research_id: str
     agent_id: str
@@ -110,19 +110,58 @@ class BenchmarkResult(BaseModel):
     evidence: str
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
+class Hypothesis(BaseModel):
+    current_behavior: str
+    observed_weakness: str
+    proposed_change: str
+    expected_improvement: str
+    risk: str
+    benchmark: str
+    acceptance_threshold: str
+
 class EvolutionProposal(BaseModel):
     proposal_id: str
-    target: str
-    change_type: str
+    target_type: EvolutionTarget
+    target_id: str
+    current_version: str | int | None = None
+    candidate_version: str | int | None = None
     description: str
+    hypothesis: Hypothesis
     evidence_ids: list[str] = Field(default_factory=list)
-    expected_improvement: str
-    risk: str = "LOW"
     benchmark_id: str | None = None
+    experiment_id: str | None = None
     status: EvolutionStatus = "PROPOSED"
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     approved_at: datetime | None = None
     deployed_at: datetime | None = None
+    rolled_back_at: datetime | None = None
+    rollback_version: str | int | None = None
+
+class ExperimentRecord(BaseModel):
+    experiment_id: str
+    proposal_id: str
+    baseline_version: str | int
+    candidate_version: str | int
+    target: str
+    dataset: str
+    sample_count: int
+    started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    completed_at: datetime | None = None
+    baseline_score: float | None = None
+    candidate_score: float | None = None
+    improvement_percent: float | None = None
+    regressions: int = 0
+    cost: float = 0.0
+    latency: float = 0.0
+    status: str = "RUNNING"
+    environment: str
+
+class ApprovalPolicy(BaseModel):
+    risk_level: Literal["LOW", "MEDIUM", "HIGH"]
+    requires_human: bool
+    minimum_samples: int
+    minimum_improvement: float
+    maximum_regression: float
 
 class EngineeringLesson(BaseModel):
     id: str

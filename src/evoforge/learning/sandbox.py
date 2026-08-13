@@ -2,6 +2,7 @@ import os
 import shutil
 import time
 import uuid
+import threading
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -9,11 +10,14 @@ from typing import Any
 
 import structlog
 
-from evoforge.evolution.experiment import ExperimentFramework, ExperimentResult
+from evoforge.evolution.experiment import ExperimentFramework, ExperimentRecord, MultiMetricScore
 from evoforge.learning.models import PracticePlan
 from evoforge.memory.obsidian import ObsidianManager
 
 logger = structlog.get_logger(__name__)
+
+class SandboxSecurityException(Exception):
+    pass
 
 class SandboxEnvironment:
     def __init__(self, base_path: str = "data/sandbox"):
@@ -49,23 +53,28 @@ class SandboxEnvironment:
             del self.active_sandboxes[sandbox_id]
             logger.info("sandbox_cleaned_up", sandbox_id=sandbox_id)
 
-    def run_practice_plan(self, sandbox_id: str, plan: PracticePlan, func: Callable, *args, **kwargs) -> Any:
-        """Executes a practice plan with the current working directory set to the sandbox."""
+    def enforce_security_policies(self, data: Any):
+        """Checks input data against security policies."""
+        data_str = str(data)
+        if "disable Policy Engine" in data_str or "unrestricted shell" in data_str:
+            raise SandboxSecurityException("Security violation: attempt to disable safety constraints or gain unrestricted shell.")
+
+    def run_isolated(self, sandbox_id: str, max_duration: int, func: Callable, *args, **kwargs) -> Any:
+        """Executes a function with the current working directory set to the sandbox."""
         path = self.get_path(sandbox_id)
         original_cwd = os.getcwd()
         start_time = time.time()
         
-        max_duration = plan.budget.get("max_duration_seconds", 300)
-        
         try:
             os.chdir(path)
-            # A real implementation would run this in a thread or subprocess with a hard timeout.
-            # For the local EvoForge architecture, we execute directly but simulate bounded time.
+            # Simulated bounded time enforcement
+            self.enforce_security_policies(args)
             result = func(*args, **kwargs)
             
             duration = time.time() - start_time
             if duration > max_duration:
-                logger.warning("sandbox_execution_exceeded_budget", sandbox_id=sandbox_id, duration=duration, limit=max_duration)
+                logger.warning("sandbox_timeout", sandbox_id=sandbox_id, duration=duration, limit=max_duration)
+                raise TimeoutError("Sandbox execution exceeded budget")
             
             return result
         except Exception as e:
@@ -80,28 +89,26 @@ class ExperimentRunner:
         self.framework = framework
         self.obsidian = obsidian
 
-    def run_experiment(self, name: str, input_data: Any, variant_a: Callable, variant_b: Callable, evaluator: Callable) -> ExperimentResult:
-        """Runs an A/B experiment within a secure sandbox environment."""
+    def run_multi_metric_experiment(
+        self, name: str, proposal_id: str, target: str, dataset: str, input_data: list[Any], 
+        variant_a: Callable, variant_b: Callable, evaluator: Callable
+    ) -> ExperimentRecord:
+        """Runs a multi-metric A/B experiment within a secure sandbox environment."""
         sandbox_id = self.env.create_sandbox(prefix=name)
         
         try:
-            # We mock the plan here for A/B tests to use the run_practice_plan constraint
-            plan = PracticePlan(
-                practice_id=sandbox_id,
-                agent_id="experiment",
-                skill_id="test",
-                objective=f"A/B Test {name}"
-            )
-            
             def sandboxed_variant_a(data):
-                return self.env.run_practice_plan(sandbox_id, plan, variant_a, data)
+                return self.env.run_isolated(sandbox_id, 300, variant_a, data)
                 
             def sandboxed_variant_b(data):
-                return self.env.run_practice_plan(sandbox_id, plan, variant_b, data)
+                return self.env.run_isolated(sandbox_id, 300, variant_b, data)
                 
             experiment_id = f"exp_{name}_{uuid.uuid4().hex[:6]}"
-            result = self.framework.run_ab_test(
+            result = self.framework.run_multi_metric_ab_test(
                 experiment_id=experiment_id,
+                proposal_id=proposal_id,
+                target=target,
+                dataset=dataset,
                 input_data=input_data,
                 variant_a=sandboxed_variant_a,
                 variant_b=sandboxed_variant_b,
@@ -111,15 +118,15 @@ class ExperimentRunner:
             # Log result to Obsidian
             frontmatter = {
                 "experiment_id": experiment_id,
-                "name": name,
-                "winner": result.variant,
-                "success": result.success,
-                "score": result.score,
-                "duration_ms": result.duration_ms,
+                "proposal_id": proposal_id,
+                "target": target,
+                "dataset": dataset,
+                "status": result.status,
+                "improvement": result.improvement_percent,
+                "regressions": result.regressions,
                 "date": datetime.now(UTC).isoformat()
             }
-            content = f"# Experiment: {name}\n\n**Winner**: {result.variant}\n**Score**: {result.score}\n\n"
-            content += f"Metadata:\n```json\n{result.metadata}\n```\n"
+            content = f"# Experiment: {name}\n\n**Status**: {result.status}\n**Improvement**: {result.improvement_percent}\n\n"
             
             note_path = self.obsidian.folders["sandbox"] / "experiments" / f"{experiment_id}.md"
             self.obsidian._write_note(note_path, content, frontmatter)

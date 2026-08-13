@@ -10,6 +10,7 @@ import KnowledgeBase from './KnowledgeBase';
 import Deployments from './Deployments';
 import PortfolioView from './PortfolioView';
 import LearningView from './LearningView';
+import EvolutionView from './EvolutionView';
 import Settings from './Settings';
 
 export default function App() {
@@ -141,6 +142,10 @@ export default function App() {
     
     if (activeTab === 'learning') {
       return <LearningView />;
+    }
+    
+    if (activeTab === 'evolution') {
+      return <EvolutionView />;
     }
     
     if (activeTab === 'settings') {

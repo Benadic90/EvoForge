@@ -213,20 +213,59 @@ CREATE TABLE IF NOT EXISTS benchmarks (
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Evolution Proposals (Phase 5)
+-- Evolution Proposals (Phase 6)
 CREATE TABLE IF NOT EXISTS evolution_proposals (
     proposal_id TEXT PRIMARY KEY,
-    target TEXT NOT NULL,
-    change_type TEXT NOT NULL,
+    target_type TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    current_version TEXT,
+    candidate_version TEXT,
     description TEXT,
+    hypothesis_json TEXT,
     evidence_ids TEXT,
-    expected_improvement TEXT,
-    risk TEXT,
     benchmark_id TEXT,
+    experiment_id TEXT,
+    risk TEXT DEFAULT 'LOW',
     status TEXT DEFAULT 'PROPOSED',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     approved_at TIMESTAMP,
-    deployed_at TIMESTAMP
+    deployed_at TIMESTAMP,
+    rolled_back_at TIMESTAMP,
+    rollback_version TEXT
+);
+
+-- Evolution Experiments (Phase 6)
+CREATE TABLE IF NOT EXISTS experiment_records (
+    experiment_id TEXT PRIMARY KEY,
+    proposal_id TEXT REFERENCES evolution_proposals(proposal_id),
+    baseline_version TEXT,
+    candidate_version TEXT,
+    target TEXT,
+    dataset TEXT,
+    sample_count INTEGER DEFAULT 0,
+    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP,
+    baseline_score REAL,
+    candidate_score REAL,
+    improvement_percent REAL,
+    regressions INTEGER DEFAULT 0,
+    cost REAL DEFAULT 0.0,
+    latency REAL DEFAULT 0.0,
+    status TEXT DEFAULT 'RUNNING',
+    environment TEXT
+);
+
+-- Evolution Deployments (Phase 6)
+CREATE TABLE IF NOT EXISTS evolution_deployments (
+    deployment_id TEXT PRIMARY KEY,
+    proposal_id TEXT REFERENCES evolution_proposals(proposal_id),
+    deployed_version TEXT NOT NULL,
+    rollback_version TEXT NOT NULL,
+    deployment_type TEXT DEFAULT 'FULL', -- CANARY, SHADOW, FULL
+    status TEXT DEFAULT 'ACTIVE',
+    deployed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    rolled_back_at TIMESTAMP,
+    rollback_reason TEXT
 );
 
 -- Failure registry
@@ -472,6 +511,15 @@ class Database:
                     "ALTER TABLE portfolio_evidence ADD COLUMN source_url TEXT",
                     "ALTER TABLE portfolio_evidence ADD COLUMN severity TEXT DEFAULT 'UNKNOWN'",
                     "ALTER TABLE portfolio_evidence ADD COLUMN expires_at TIMESTAMP",
+                    # Phase 6 migrations
+                    "ALTER TABLE evolution_proposals ADD COLUMN target_type TEXT",
+                    "ALTER TABLE evolution_proposals ADD COLUMN target_id TEXT",
+                    "ALTER TABLE evolution_proposals ADD COLUMN current_version TEXT",
+                    "ALTER TABLE evolution_proposals ADD COLUMN candidate_version TEXT",
+                    "ALTER TABLE evolution_proposals ADD COLUMN hypothesis_json TEXT",
+                    "ALTER TABLE evolution_proposals ADD COLUMN experiment_id TEXT",
+                    "ALTER TABLE evolution_proposals ADD COLUMN rolled_back_at TIMESTAMP",
+                    "ALTER TABLE evolution_proposals ADD COLUMN rollback_version TEXT",
                 ]:
                     try:
                         conn.execute(col_query)

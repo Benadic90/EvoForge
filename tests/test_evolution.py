@@ -19,18 +19,23 @@ def test_evolution_agent():
     assert agent.name == "EvolutionAgent"
 
 def test_experiment_framework():
-    framework = ExperimentFramework()
+    from evoforge.learning.models import ApprovalPolicy
+    db = MagicMock(spec=Database)
+    policy = ApprovalPolicy(risk_level="LOW", requires_human=True, minimum_samples=1, minimum_improvement=0.05, maximum_regression=0.0)
+    framework = ExperimentFramework(db, policy)
     
     def variant_a(data): return data + 1
     def variant_b(data): return data + 2
-    def evaluator(result): return float(result) # Higher is better
+    from evoforge.evolution.experiment import MultiMetricScore
+    def evaluator(result): return MultiMetricScore(quality=float(result)) # Higher is better
     
-    result = framework.run_ab_test("test-exp-1", 5, variant_a, variant_b, evaluator)
+    result = framework.run_multi_metric_ab_test(
+        "test-exp-1", "prop1", "tgt", "ds", [1, 1, 1, 1, 1], variant_a, variant_b, evaluator
+    )
     
     assert result.experiment_id == "test-exp-1"
-    assert result.variant == "B" # 5+2 = 7 > 6
-    assert result.success is True
-    assert result.score == 7.0
+    assert result.status == "PASSED" # 1+2 = 3 > 1+1 = 2
+    assert result.candidate_score > result.baseline_score
 
 def test_performance_monitor():
     with tempfile.TemporaryDirectory() as temp_dir:

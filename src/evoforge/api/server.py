@@ -734,6 +734,8 @@ def api_get_all_tasks(limit: int = Query(50, ge=1, le=100), offset: int = Query(
 from evoforge.learning.models import (
     BenchmarkResult,
     EvolutionProposal,
+    ExperimentRecord,
+    Hypothesis,
     ResearchJob,
     Skill,
     SkillGap,
@@ -794,17 +796,92 @@ def api_list_evolution_proposals(limit: int = Query(50, ge=1, le=100), offset: i
     for row in rows:
         proposals.append(EvolutionProposal(
             proposal_id=row["proposal_id"],
-            target=row["target"],
-            change_type=row["change_type"],
+            target_type=row["target_type"],
+            target_id=row["target_id"],
+            current_version=row["current_version"],
+            candidate_version=row["candidate_version"],
             description=row["description"],
+            hypothesis=Hypothesis.model_validate_json(row["hypothesis_json"]) if row["hypothesis_json"] else None,
             evidence_ids=json.loads(row["evidence_ids"]) if row["evidence_ids"] else [],
-            expected_improvement=row["expected_improvement"],
-            risk=row["risk"],
+            benchmark_id=row.get("benchmark_id"),
+            experiment_id=row.get("experiment_id"),
             status=row["status"],
             created_at=row["created_at"],
-            updated_at=row["updated_at"]
+            approved_at=row.get("approved_at"),
+            deployed_at=row.get("deployed_at"),
+            rolled_back_at=row.get("rolled_back_at"),
+            rollback_version=row.get("rollback_version")
         ))
     return proposals
+
+@app.get("/api/evolution/experiments", response_model=list[ExperimentRecord])
+def api_list_experiments(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0)) -> list[ExperimentRecord]:
+    query = "SELECT * FROM experiment_records ORDER BY started_at DESC LIMIT ? OFFSET ?"
+    rows = db.fetchall(query, (limit, offset))
+    return [ExperimentRecord(**dict(row)) for row in rows]
+
+from pydantic import BaseModel
+
+class ApprovalRequest(BaseModel):
+    deployment_type: str = "FULL"
+
+@app.post("/api/evolution/proposals/{proposal_id}/approve")
+def api_approve_proposal(proposal_id: str, req: ApprovalRequest):
+    from evoforge.evolution.pipeline import EvolutionPipeline
+    from evoforge.learning.models import ApprovalPolicy
+    from evoforge.evolution.experiment import ExperimentFramework
+    from evoforge.evolution.rollback import RollbackManager
+    from evoforge.learning.skill_registry import SkillRegistry
+    
+    registry = SkillRegistry(db)
+    policy = ApprovalPolicy(risk_level="LOW", requires_human=True, minimum_samples=1, minimum_improvement=0.05, maximum_regression=0.0)
+    framework = ExperimentFramework(db, policy)
+    rollback = RollbackManager(db, registry)
+    pipeline = EvolutionPipeline(db, framework, rollback, policy)
+    
+    try:
+        # We need to fetch the proposal first
+        rows = db.fetchall("SELECT * FROM evolution_proposals WHERE proposal_id = ?", (proposal_id,))
+        if not rows:
+            raise HTTPException(status_code=404, detail="Proposal not found")
+        row = rows[0]
+        
+        proposal = EvolutionProposal(
+            proposal_id=row["proposal_id"],
+            target_type=row["target_type"],
+            target_id=row["target_id"],
+            current_version=row["current_version"],
+            candidate_version=row["candidate_version"],
+            description=row["description"],
+            hypothesis=Hypothesis.model_validate_json(row["hypothesis_json"]) if row["hypothesis_json"] else None,
+            evidence_ids=json.loads(row["evidence_ids"]) if row["evidence_ids"] else [],
+            benchmark_id=row.get("benchmark_id"),
+            experiment_id=row.get("experiment_id"),
+            status=row["status"],
+            created_at=row["created_at"],
+            approved_at=row.get("approved_at"),
+            deployed_at=row.get("deployed_at"),
+            rolled_back_at=row.get("rolled_back_at"),
+            rollback_version=row.get("rollback_version")
+        )
+        
+        pipeline.deploy_candidate(proposal, deployment_type=req.deployment_type)
+        return {"status": "success", "message": f"Proposal {proposal_id} approved and deployed."}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+        
+@app.post("/api/evolution/proposals/{proposal_id}/reject")
+def api_reject_proposal(proposal_id: str):
+    conn = db.get_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE evolution_proposals SET status = 'REJECTED' WHERE proposal_id = ?", (proposal_id,))
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Proposal not found")
+        conn.commit()
+        return {"status": "success", "message": f"Proposal {proposal_id} rejected."}
+    finally:
+        conn.close()
 
 def start_server():
     """Starts the FastAPI server."""

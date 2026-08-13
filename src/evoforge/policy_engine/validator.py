@@ -74,3 +74,36 @@ class ActionValidator:
             logger.warning("budget_limit_reached", repo=self.policy.repo_name)
             return False
         return self.cost_tracker.can_afford(estimated_cost)
+
+class CandidateSecurityGate:
+    """Sweeps proposed evolution candidates for safety before deployment."""
+    def __init__(self):
+        self.secret_detector = SecretDetector()
+        self.forbidden_keywords = [
+            "disable Policy Engine",
+            "unrestricted shell",
+            "sudo ",
+            "rm -rf",
+            "PermissionLevel.ADMIN"
+        ]
+
+    def validate_proposal(self, target_type: str, candidate_content: str) -> tuple[bool, str]:
+        """
+        Validates an evolutionary candidate patch/prompt for secrets and malicious intents.
+        Returns (is_safe, reason).
+        """
+        # 1. Check for hardcoded secrets
+        secrets = self.secret_detector.scan_text(candidate_content)
+        if secrets:
+            return False, f"Hardcoded secrets detected: {[s[0] for s in secrets]}"
+
+        # 2. Check for policy bypass / destructive keywords
+        for kw in self.forbidden_keywords:
+            if kw in candidate_content:
+                return False, f"Forbidden keyword detected: {kw}"
+
+        # 3. Code-level heuristics for AGENT_CONFIG or PROMPT
+        if target_type == "AGENT_CONFIG" and "shell_allowlist" not in candidate_content:
+            pass # We could enforce that shell configs are untouched
+
+        return True, "Passed security sweep."
