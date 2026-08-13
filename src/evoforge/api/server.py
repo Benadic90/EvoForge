@@ -709,6 +709,7 @@ def api_add_project(req: ProjectAddRequest) -> ProjectProfile:
         repository_url=f"https://github.com/{repo}",
         owner=owner,
         name=name,
+        default_branch="main",
         description=f"Auto-managed repository {repo}",
         status="MANAGED",
         priority_score=50.0,
