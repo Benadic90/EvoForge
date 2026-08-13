@@ -34,7 +34,7 @@ class GitHubClient:
             logger.error("get_repo_failed", repo=full_name, error=str(e))
             raise
 
-    def get_open_issues(self, repo_full_name: str, limit: int = 50) -> list[dict]:
+    def get_open_issues(self, repo_full_name: str, limit: int = 50) -> list[dict] | None:
         try:
             repo = self.get_repo(repo_full_name)
             # Fetch issues that are NOT pull requests
@@ -45,6 +45,7 @@ class GitHubClient:
                         "id": str(issue.number),
                         "title": issue.title,
                         "body": issue.body,
+                        "html_url": issue.html_url,
                         "created_at": issue.created_at,
                         "labels": [lbl.name for lbl in issue.labels]
                     })
@@ -53,7 +54,7 @@ class GitHubClient:
             return issues
         except GithubException as e:
             logger.error("get_open_issues_failed", repo=repo_full_name, error=str(e))
-            return []
+            return None
 
     def get_open_prs(self, repo_full_name: str, limit: int = 50) -> list[dict]:
         try:

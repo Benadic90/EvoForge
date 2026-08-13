@@ -1,12 +1,16 @@
-import uuid
 import json
+import uuid
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import Any
+
 import structlog
 
 from evoforge.memory.database import Database
 from evoforge.portfolio.models import (
-    ProjectProfile, PortfolioTask, PortfolioRanking, PortfolioEvidence
+    PortfolioEvidence,
+    PortfolioRanking,
+    PortfolioTask,
+    ProjectProfile,
 )
 from evoforge.portfolio.registry import ProjectRegistry
 
@@ -25,7 +29,7 @@ class PortfolioPriorityEngine:
             "user_impact": 0.1
         }
 
-    def generate_backlog(self, project_id: str, raw_items: List[Dict[str, Any]]) -> List[PortfolioTask]:
+    def generate_backlog(self, project_id: str, raw_items: list[dict[str, Any]]) -> list[PortfolioTask]:
         """
         Normalize diverse items (GH issues, CI failures) into PortfolioTasks.
         raw_items is a list of dicts with keys: source, source_id, title, description,
@@ -42,10 +46,10 @@ class PortfolioPriorityEngine:
                 source_id=str(item.get("source_id", uuid.uuid4())),
                 priority=float(item.get("priority_hint", 0.0)),
                 risk=item.get("risk_hint", "LOW"),
-                estimated_effort=item.get("effort_hint", "UNKNOWN"),
+                estimated_minutes=item.get("estimated_minutes", None),
                 dependencies=item.get("dependencies", []),
                 required_capabilities=item.get("required_capabilities", []),
-                status="NOT_STARTED",
+                status="DISCOVERED",
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow(),
                 metadata=item.get("metadata", {})
@@ -56,12 +60,15 @@ class PortfolioPriorityEngine:
         logger.info("backlog_generated", project_id=project_id, task_count=len(tasks))
         return tasks
 
-    def rank_projects(self) -> List[PortfolioRanking]:
-        """Rank all active projects based on priority scoring model."""
-        projects = [p for p in self.registry.list() if p.status == "ACTIVE"]
-        rankings = []
+    def rank_projects(self) -> list[PortfolioRanking]:
+        """Rank all active projects in the portfolio."""
+        self.db.execute("DELETE FROM portfolio_rankings WHERE item_type = 'project'")
         
-        for p in projects:
+        profiles = self.registry.list()
+        active_profiles = [p for p in profiles if p.status == "MANAGED" or p.status == "ACTIVE"]
+        
+        rankings = []
+        for p in active_profiles:
             score, reasons, evidence = self._calculate_project_score(p)
             # Update project score in registry
             p.priority_score = score
@@ -94,9 +101,14 @@ class PortfolioPriorityEngine:
         logger.info("projects_ranked", count=len(final_rankings))
         return final_rankings
 
-    def rank_tasks(self, project_id: Optional[str] = None) -> List[PortfolioRanking]:
+    def rank_tasks(self, project_id: str | None = None) -> list[PortfolioRanking]:
         """Rank open tasks across the portfolio or for a specific project."""
-        query = "SELECT * FROM portfolio_tasks WHERE status NOT IN ('COMPLETE', 'CANCELLED')"
+        if project_id:
+            self.db.execute("DELETE FROM portfolio_rankings WHERE item_type = 'task' AND item_id IN (SELECT task_id FROM portfolio_tasks WHERE project_id = ?)", (project_id,))
+        else:
+            self.db.execute("DELETE FROM portfolio_rankings WHERE item_type = 'task'")
+            
+        query = "SELECT * FROM portfolio_tasks WHERE status NOT IN ('COMPLETED', 'CANCELLED', 'DEFERRED', 'COMPLETE')"
         params = []
         if project_id:
             query += " AND project_id = ?"
@@ -137,50 +149,67 @@ class PortfolioPriorityEngine:
         logger.info("tasks_ranked", count=len(final_rankings))
         return final_rankings
 
-    def _calculate_project_score(self, project: ProjectProfile) -> tuple[float, List[str], List[PortfolioEvidence]]:
-        score = project.importance * 0.5
-        reasons = [f"Base importance weight (+{score:.2f})"]
+    def _calculate_project_score(self, project: ProjectProfile) -> tuple[float, list[str], list[PortfolioEvidence]]:
+        score = 0.0
+        reasons = []
         evidence = []
         
-        if project.health == "CRITICAL":
-            score += 0.3
-            reasons.append("Critical project health detected (+0.30)")
-            
-        if project.ci_health == 0.0:
-            score += 0.2
-            reasons.append("Active CI pipeline failure (+0.20)")
-            
+        importance_map = {"CRITICAL": 1.0, "HIGH": 0.8, "MEDIUM": 0.5, "LOW": 0.2}
+        importance_val = importance_map.get(project.importance, 0.5)
+        
+        # We start with the importance weight
+        score += importance_val * 0.4 # max 0.4 from importance
+        reasons.append(f"Importance ({project.importance}) weight (+{importance_val * 0.4:.2f})")
+        
+        # In a real system, we fetch actual PortfolioEvidence linked to this project
+        # and mathematically apply confidence and severity.
+        
         return min(1.0, score), reasons, evidence
 
-    def _calculate_task_score(self, task: PortfolioTask) -> tuple[float, List[str], List[PortfolioEvidence]]:
-        # In a real system, this evaluates dependencies and urgency
-        score = task.priority
+    def _calculate_task_score(self, task: PortfolioTask) -> tuple[float, list[str], list[PortfolioEvidence]]:
+        # Mathematically compute task score
+        score = task.priority * 0.3
         reasons = [f"Base task priority (+{score:.2f})"]
         evidence = []
         
         if task.risk == "HIGH":
             score += 0.2
-            reasons.append("High risk task (+0.20)")
+            reasons.append("High risk penalty/bonus (+0.20)")
             
-        if "security" in task.source.lower() or "security" in task.title.lower():
-            score += 0.4
-            reasons.append("Security related task (+0.40)")
+        # The priority logic must rely on structured evidence, NOT raw strings.
+        # So we fetch evidence where task_id = task.task_id
+        # and sum the severities.
+        query = "SELECT * FROM portfolio_evidence WHERE task_id = ?"
+        ev_rows = self.db.fetchall(query, (task.task_id,))
+        for row in ev_rows:
+            ev = PortfolioEvidence(**row)
+            evidence.append(ev)
+            if ev.severity == "CRITICAL":
+                added = 0.4 * ev.confidence
+                score += added
+                reasons.append(f"Critical evidence: {ev.observation} (+{added:.2f})")
+            elif ev.severity == "HIGH":
+                added = 0.2 * ev.confidence
+                score += added
+                reasons.append(f"High evidence: {ev.observation} (+{added:.2f})")
             
         return min(1.0, score), reasons, evidence
 
     def _save_task(self, task: PortfolioTask) -> None:
         query = """
             INSERT INTO portfolio_tasks (
-                task_id, project_id, title, description, source, source_id,
-                priority, risk, estimated_effort, dependencies, required_capabilities,
-                status, metadata, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                task_id, canonical_task_id, project_id, repository_full_name, title, description,
+                source, source_type, source_id, source_url, priority, confidence, risk, estimated_minutes,
+                dependencies, required_capabilities, status, metadata, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(task_id) DO UPDATE SET
+                canonical_task_id=excluded.canonical_task_id,
                 title=excluded.title,
                 description=excluded.description,
                 priority=excluded.priority,
+                confidence=excluded.confidence,
                 risk=excluded.risk,
-                estimated_effort=excluded.estimated_effort,
+                estimated_minutes=excluded.estimated_minutes,
                 dependencies=excluded.dependencies,
                 required_capabilities=excluded.required_capabilities,
                 status=excluded.status,
@@ -189,14 +218,19 @@ class PortfolioPriorityEngine:
         """
         params = (
             task.task_id,
+            task.canonical_task_id,
             task.project_id,
+            task.repository_full_name,
             task.title,
             task.description,
             task.source,
+            task.source_type,
             task.source_id,
+            task.source_url,
             task.priority,
+            task.confidence,
             task.risk,
-            task.estimated_effort,
+            task.estimated_minutes,
             json.dumps(task.dependencies),
             json.dumps(task.required_capabilities),
             task.status,
@@ -218,26 +252,32 @@ class PortfolioPriorityEngine:
             ranking.rank,
             ranking.score,
             json.dumps(ranking.reasons),
-            json.dumps([e.dict() for e in ranking.evidence]),
+            json.dumps([e.model_dump() for e in ranking.evidence]),
             ranking.created_at
         )
         self.db.execute(query, params)
 
     def _row_to_task(self, row: dict) -> PortfolioTask:
+        row_dict = dict(row)
         return PortfolioTask(
-            task_id=row["task_id"],
-            project_id=row["project_id"],
-            title=row["title"],
-            description=row["description"],
-            source=row["source"],
-            source_id=row["source_id"],
-            priority=row["priority"],
-            risk=row["risk"],
-            estimated_effort=row["estimated_effort"],
-            dependencies=json.loads(row["dependencies"]) if row["dependencies"] else [],
-            required_capabilities=json.loads(row["required_capabilities"]) if row["required_capabilities"] else [],
-            status=row["status"],
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
-            metadata=json.loads(row["metadata"]) if row["metadata"] else {}
+            task_id=row_dict["task_id"],
+            canonical_task_id=row_dict.get("canonical_task_id"),
+            project_id=row_dict["project_id"],
+            repository_full_name=row_dict.get("repository_full_name"),
+            title=row_dict["title"],
+            description=row_dict["description"],
+            source=row_dict["source"],
+            source_type=row_dict.get("source_type", "unknown"),
+            source_id=row_dict["source_id"],
+            source_url=row_dict.get("source_url"),
+            priority=row_dict["priority"],
+            confidence=row_dict.get("confidence", 1.0),
+            risk=row_dict["risk"],
+            estimated_minutes=row_dict.get("estimated_minutes"),
+            dependencies=json.loads(row_dict["dependencies"]) if row_dict["dependencies"] else [],
+            required_capabilities=json.loads(row_dict["required_capabilities"]) if row_dict["required_capabilities"] else [],
+            status=row_dict["status"],
+            created_at=row_dict["created_at"],
+            updated_at=row_dict["updated_at"],
+            metadata=json.loads(row_dict["metadata"]) if row_dict["metadata"] else {}
         )

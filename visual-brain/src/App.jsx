@@ -34,25 +34,25 @@ export default function App() {
     const fetchAllData = () => {
       // 1. System Status
       fetch('http://localhost:8000/api/status')
-        .then(res => res.json())
+        .then(res => { if (!res.ok) throw new Error('Status error'); return res.json(); })
         .then(data => setSystemStatus(data))
         .catch(err => console.error("Error fetching status", err));
 
       // 2. Knowledge Graph
       fetch('http://localhost:8000/api/graph/knowledge')
-        .then(res => res.json())
+        .then(res => { if (!res.ok) throw new Error('Graph error'); return res.json(); })
         .then(data => setGraphData(data))
         .catch(err => console.error("Error fetching graph data", err));
 
       // 3. Agent Metrics
       fetch('http://localhost:8000/api/agents/metrics')
-        .then(res => res.json())
+        .then(res => { if (!res.ok) throw new Error('Metrics error'); return res.json(); })
         .then(data => setMetrics(data))
         .catch(err => console.error("Error fetching metrics", err));
 
       // 4. Events & Telemetry
       fetch('http://localhost:8000/api/events/recent?limit=10')
-        .then(res => res.json())
+        .then(res => { if (!res.ok) throw new Error('Events error'); return res.json(); })
         .then(data => {
           if (Array.isArray(data) && data.length > 0) {
             setRecentEvents(data.map(evt => ({
@@ -104,11 +104,11 @@ export default function App() {
               />
               
               <MetricsWidget 
-                title="Developer Quality Rating" 
+                title="Unified Pts (Developer Score)" 
                 type="sparkline"
                 value={`${metrics.developer_points} pts`} 
                 description={`Executors: ${systemStatus.healthy_executors} online`}
-                subtext="real-time telemetry"
+                subtext="unified measure of agent dev skill"
               />
               
               <WorkflowFeed workflows={recentEvents} />

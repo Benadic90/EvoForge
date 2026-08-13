@@ -409,8 +409,10 @@ def get_knowledge_graph() -> KnowledgeGraphResponse:
     node_ids.add("EvoForge Core")
 
     # Registered Agents
+    agent_ids = []
     for contract in agent_registry.list():
         agent_id = contract.agent_id
+        agent_ids.append(agent_id)
         nodes.append(
             KnowledgeGraphNode(
                 id=agent_id,
@@ -421,6 +423,24 @@ def get_knowledge_graph() -> KnowledgeGraphResponse:
         )
         node_ids.add(agent_id)
         links.append(KnowledgeGraphLink(source=agent_id, target="EvoForge Core", value=2, label="contract"))
+
+    # Add logical workflow pathways between agents to represent collaboration
+    # This creates the interconnected, organic "messy" graph layout organically
+    workflow_paths = [
+        ("planner", "developer", "plans"),
+        ("architect", "developer", "designs"),
+        ("developer", "reviewer", "submits code"),
+        ("developer", "qa", "tests"),
+        ("reviewer", "security", "audits"),
+        ("qa", "devops", "deploys"),
+        ("research", "planner", "informs"),
+        ("documentation", "developer", "documents"),
+        ("security", "developer", "vuln report")
+    ]
+    
+    for src, tgt, label in workflow_paths:
+        if src in node_ids and tgt in node_ids:
+            links.append(KnowledgeGraphLink(source=src, target=tgt, value=1, label=label))
 
     # Stored Knowledge Items
     knowledge_rows = db.fetchall(
@@ -522,15 +542,22 @@ def get_antigravity_sessions() -> list[Any]:
 # --- Portfolio Intelligence Endpoints ---
 
 from evoforge.portfolio.models import (
-    ProjectProfile, ProjectHealthReport, ProjectRoadmap, PortfolioTask,
-    PortfolioRanking, DailyPortfolioPlan, PortfolioHealth
+    DailyPortfolioPlan,
+    PortfolioHealth,
+    PortfolioRanking,
+    PortfolioTask,
+    ProjectHealthReport,
+    ProjectProfile,
+    ProjectRoadmap,
 )
 
+
 @app.get("/api/projects", response_model=list[ProjectProfile])
-def api_list_projects() -> list[ProjectProfile]:
+def api_list_projects(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0)) -> list[ProjectProfile]:
     from evoforge.portfolio.registry import ProjectRegistry
     registry = ProjectRegistry(db)
-    return registry.list()
+    projects = registry.list()
+    return projects[offset:offset+limit]
 
 @app.get("/api/projects/{project_id}", response_model=ProjectProfile)
 def api_get_project(project_id: str) -> ProjectProfile:
@@ -543,9 +570,9 @@ def api_get_project(project_id: str) -> ProjectProfile:
 
 @app.get("/api/projects/{project_id}/health", response_model=ProjectHealthReport)
 def api_get_project_health(project_id: str) -> ProjectHealthReport:
+    from evoforge.github_integration.client import GitHubClient
     from evoforge.portfolio.registry import ProjectRegistry
     from evoforge.portfolio.scanner import ProjectScanner
-    from evoforge.github_integration.client import GitHubClient
     
     registry = ProjectRegistry(db)
     if not registry.get(project_id):
@@ -553,16 +580,20 @@ def api_get_project_health(project_id: str) -> ProjectHealthReport:
         
     gh_client = GitHubClient()
     scanner = ProjectScanner(db, gh_client, registry)
-    report = scanner.scan_project(project_id)
-    if not report:
-        raise HTTPException(status_code=500, detail="Failed to scan project")
-    return report
+    try:
+        report, _ = scanner.scan_project(project_id)
+        if not report:
+            raise HTTPException(status_code=500, detail="Failed to scan project")
+        return report
+    except Exception as e:
+        logger.error("scan_failed", project_id=project_id, error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/projects/{project_id}/roadmap", response_model=ProjectRoadmap)
 def api_get_project_roadmap(project_id: str) -> ProjectRoadmap:
+    from evoforge.memory.obsidian import ObsidianManager
     from evoforge.portfolio.registry import ProjectRegistry
     from evoforge.portfolio.roadmap import RoadmapSynchronizer
-    from evoforge.memory.obsidian import ObsidianManager
     
     registry = ProjectRegistry(db)
     if not registry.get(project_id):
@@ -570,28 +601,38 @@ def api_get_project_roadmap(project_id: str) -> ProjectRoadmap:
         
     obsidian = ObsidianManager(config.memory.vault_path)
     sync = RoadmapSynchronizer(db, obsidian, registry)
-    roadmap = sync.sync_roadmap(project_id)
-    if not roadmap:
-        raise HTTPException(status_code=500, detail="Failed to sync roadmap")
-    return roadmap
+    try:
+        roadmap = sync.sync_roadmap(project_id)
+        if not roadmap:
+            raise HTTPException(status_code=500, detail="Failed to sync roadmap")
+        return roadmap
+    except Exception as e:
+        logger.error("sync_failed", project_id=project_id, error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/projects/{project_id}/tasks", response_model=list[PortfolioTask])
-def api_get_project_tasks(project_id: str) -> list[PortfolioTask]:
-    query = "SELECT * FROM portfolio_tasks WHERE project_id = ?"
-    rows = db.fetchall(query, (project_id,))
+def api_get_project_tasks(project_id: str, limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0)) -> list[PortfolioTask]:
+    query = "SELECT * FROM portfolio_tasks WHERE project_id = ? LIMIT ? OFFSET ?"
+    rows = db.fetchall(query, (project_id, limit, offset))
     
     tasks = []
-    for row in rows:
+    for row_raw in rows:
+        row = dict(row_raw)
         tasks.append(PortfolioTask(
             task_id=row["task_id"],
+            canonical_task_id=row.get("canonical_task_id"),
             project_id=row["project_id"],
+            repository_full_name=row.get("repository_full_name"),
             title=row["title"],
             description=row["description"],
             source=row["source"],
+            source_type=row.get("source_type", "unknown"),
             source_id=row["source_id"],
+            source_url=row.get("source_url"),
             priority=row["priority"],
+            confidence=row.get("confidence", 1.0),
             risk=row["risk"],
-            estimated_effort=row["estimated_effort"],
+            estimated_minutes=row.get("estimated_minutes"),
             dependencies=json.loads(row["dependencies"]) if row["dependencies"] else [],
             required_capabilities=json.loads(row["required_capabilities"]) if row["required_capabilities"] else [],
             status=row["status"],
@@ -629,45 +670,55 @@ def api_get_portfolio_health() -> PortfolioHealth:
     )
 
 @app.get("/api/portfolio/ranking", response_model=list[PortfolioRanking])
-def api_get_portfolio_ranking() -> list[PortfolioRanking]:
-    from evoforge.portfolio.registry import ProjectRegistry
+def api_get_portfolio_ranking(limit: int = Query(50, ge=1, le=100)) -> list[PortfolioRanking]:
     from evoforge.portfolio.priority_engine import PortfolioPriorityEngine
+    from evoforge.portfolio.registry import ProjectRegistry
     registry = ProjectRegistry(db)
     engine = PortfolioPriorityEngine(db, registry)
-    return engine.rank_projects()
+    return engine.rank_projects()[:limit]
 
 @app.get("/api/portfolio/daily-plan", response_model=DailyPortfolioPlan)
 def api_get_daily_plan() -> DailyPortfolioPlan:
-    from evoforge.portfolio.registry import ProjectRegistry
     from evoforge.portfolio.daily_planner import DailyPlanner
     from evoforge.portfolio.priority_engine import PortfolioPriorityEngine
+    from evoforge.portfolio.registry import ProjectRegistry
     registry = ProjectRegistry(db)
     
-    # rank first
-    engine = PortfolioPriorityEngine(db, registry)
-    engine.rank_projects()
-    engine.rank_tasks()
-    
-    planner = DailyPlanner(db, registry)
-    return planner.generate_plan()
+    try:
+        # rank first
+        engine = PortfolioPriorityEngine(db, registry)
+        engine.rank_projects()
+        engine.rank_tasks()
+        
+        planner = DailyPlanner(db, registry)
+        return planner.generate_plan()
+    except Exception as e:
+        logger.error("daily_plan_failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/portfolio/tasks", response_model=list[PortfolioTask])
-def api_get_all_tasks() -> list[PortfolioTask]:
-    query = "SELECT * FROM portfolio_tasks"
-    rows = db.fetchall(query)
+def api_get_all_tasks(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0)) -> list[PortfolioTask]:
+    query = "SELECT * FROM portfolio_tasks LIMIT ? OFFSET ?"
+    rows = db.fetchall(query, (limit, offset))
     
     tasks = []
-    for row in rows:
+    for row_raw in rows:
+        row = dict(row_raw)
         tasks.append(PortfolioTask(
             task_id=row["task_id"],
+            canonical_task_id=row.get("canonical_task_id"),
             project_id=row["project_id"],
+            repository_full_name=row.get("repository_full_name"),
             title=row["title"],
             description=row["description"],
             source=row["source"],
+            source_type=row.get("source_type", "unknown"),
             source_id=row["source_id"],
+            source_url=row.get("source_url"),
             priority=row["priority"],
+            confidence=row.get("confidence", 1.0),
             risk=row["risk"],
-            estimated_effort=row["estimated_effort"],
+            estimated_minutes=row.get("estimated_minutes"),
             dependencies=json.loads(row["dependencies"]) if row["dependencies"] else [],
             required_capabilities=json.loads(row["required_capabilities"]) if row["required_capabilities"] else [],
             status=row["status"],

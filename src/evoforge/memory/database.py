@@ -262,8 +262,8 @@ CREATE TABLE IF NOT EXISTS projects (
     default_branch TEXT NOT NULL,
     description TEXT,
     vision TEXT,
-    status TEXT DEFAULT 'ACTIVE',
-    importance REAL DEFAULT 0.5,
+    status TEXT DEFAULT 'MANAGED',
+    importance TEXT DEFAULT 'MEDIUM',
     priority_score REAL DEFAULT 0.0,
     health TEXT DEFAULT 'UNKNOWN',
     ci_health REAL,
@@ -281,6 +281,22 @@ CREATE TABLE IF NOT EXISTS projects (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS project_health_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id TEXT NOT NULL REFERENCES projects(project_id),
+    overall_health TEXT,
+    security_health REAL,
+    test_health REAL,
+    documentation_health REAL,
+    maintenance_health REAL,
+    activity_health REAL,
+    technical_debt REAL,
+    ci_health REAL,
+    roadmap_health REAL,
+    confidence REAL DEFAULT 1.0,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS project_roadmaps (
     roadmap_id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL REFERENCES projects(project_id),
@@ -296,17 +312,22 @@ CREATE TABLE IF NOT EXISTS project_roadmaps (
 
 CREATE TABLE IF NOT EXISTS portfolio_tasks (
     task_id TEXT PRIMARY KEY,
+    canonical_task_id TEXT,
     project_id TEXT NOT NULL REFERENCES projects(project_id),
+    repository_full_name TEXT,
     title TEXT NOT NULL,
     description TEXT,
     source TEXT NOT NULL,
+    source_type TEXT NOT NULL DEFAULT 'unknown',
     source_id TEXT NOT NULL,
+    source_url TEXT,
     priority REAL DEFAULT 0.0,
+    confidence REAL DEFAULT 1.0,
     risk TEXT DEFAULT 'LOW',
-    estimated_effort TEXT DEFAULT 'UNKNOWN',
+    estimated_minutes INTEGER,
     dependencies TEXT,
     required_capabilities TEXT,
-    status TEXT DEFAULT 'NOT_STARTED',
+    status TEXT DEFAULT 'DISCOVERED',
     metadata TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -343,9 +364,12 @@ CREATE TABLE IF NOT EXISTS portfolio_evidence (
     source TEXT NOT NULL,
     source_type TEXT NOT NULL,
     source_id TEXT,
+    source_url TEXT,
     observation TEXT NOT NULL,
+    severity TEXT DEFAULT 'UNKNOWN',
     confidence REAL DEFAULT 1.0,
     metadata TEXT,
+    expires_at TIMESTAMP,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -391,6 +415,15 @@ class Database:
                     "ALTER TABLE execution_telemetry ADD COLUMN security_passed BOOLEAN",
                     "ALTER TABLE execution_telemetry ADD COLUMN artifact_valid BOOLEAN",
                     "ALTER TABLE execution_telemetry ADD COLUMN human_approved BOOLEAN",
+                    "ALTER TABLE portfolio_tasks ADD COLUMN canonical_task_id TEXT",
+                    "ALTER TABLE portfolio_tasks ADD COLUMN repository_full_name TEXT",
+                    "ALTER TABLE portfolio_tasks ADD COLUMN source_type TEXT DEFAULT 'unknown'",
+                    "ALTER TABLE portfolio_tasks ADD COLUMN source_url TEXT",
+                    "ALTER TABLE portfolio_tasks ADD COLUMN confidence REAL DEFAULT 1.0",
+                    "ALTER TABLE portfolio_tasks ADD COLUMN estimated_minutes INTEGER",
+                    "ALTER TABLE portfolio_evidence ADD COLUMN source_url TEXT",
+                    "ALTER TABLE portfolio_evidence ADD COLUMN severity TEXT DEFAULT 'UNKNOWN'",
+                    "ALTER TABLE portfolio_evidence ADD COLUMN expires_at TIMESTAMP",
                 ]:
                     try:
                         conn.execute(col_query)

@@ -1,12 +1,12 @@
 import json
 import uuid
 from datetime import datetime
-from typing import Optional
+
 import structlog
 
 from evoforge.memory.database import Database
 from evoforge.memory.obsidian import ObsidianManager
-from evoforge.portfolio.models import ProjectRoadmap, Milestone
+from evoforge.portfolio.models import Milestone, ProjectRoadmap
 from evoforge.portfolio.registry import ProjectRegistry
 
 logger = structlog.get_logger(__name__)
@@ -17,7 +17,7 @@ class RoadmapSynchronizer:
         self.obsidian = obsidian
         self.registry = registry
 
-    def sync_roadmap(self, project_id: str) -> Optional[ProjectRoadmap]:
+    def sync_roadmap(self, project_id: str) -> ProjectRoadmap | None:
         """
         Syncs factual repository state with canonical planning state.
         This reads existing Obsidian memory and compares it against GitHub reality (mocked here
@@ -54,9 +54,15 @@ class RoadmapSynchronizer:
                 updated_at=datetime.utcnow()
             )
         
-        # Update vision safely
+        # Update vision safely and check for drift
         if profile.vision:
             roadmap.vision = profile.vision
+            
+        # If the obsidian memory indicates a significant divergence, flag it for human review.
+        if obsidian_content and len(obsidian_content) > 10:
+            if roadmap.vision not in obsidian_content and profile.name in obsidian_content:
+                logger.warning("roadmap_vision_drift", project_id=project_id)
+                roadmap.status = "NEEDS_REVIEW"
 
         # 3. Synchronize Milestones (mocking GitHub state checking)
         for milestone in roadmap.milestones:
@@ -74,7 +80,7 @@ class RoadmapSynchronizer:
         logger.info("roadmap_synced", project_id=project_id, version=roadmap.version)
         return roadmap
 
-    def _get_db_roadmap(self, project_id: str) -> Optional[ProjectRoadmap]:
+    def _get_db_roadmap(self, project_id: str) -> ProjectRoadmap | None:
         query = "SELECT * FROM project_roadmaps WHERE project_id = ? ORDER BY updated_at DESC LIMIT 1"
         rows = self.db.fetchall(query, (project_id,))
         if not rows:

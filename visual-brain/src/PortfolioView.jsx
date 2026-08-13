@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layers, Activity, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { Layers, Activity, AlertTriangle, CheckCircle, Clock, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 export default function PortfolioView() {
   const [projects, setProjects] = useState([]);
@@ -51,6 +51,12 @@ export default function PortfolioView() {
     if (h === 'WARNING') return <AlertTriangle size={16} color="#ffb300" />;
     if (h === 'CRITICAL') return <AlertTriangle size={16} color="#ff3366" />;
     return <Clock size={16} color="#8a9bb4" />;
+  };
+
+  const getTrendIcon = (trend) => {
+    if (trend === 'IMPROVING') return <TrendingUp size={14} color="#00ff9d" />;
+    if (trend === 'DECLINING') return <TrendingDown size={14} color="#ff3366" />;
+    return <Minus size={14} color="#8a9bb4" />;
   };
 
   if (loading) {
@@ -116,6 +122,7 @@ export default function PortfolioView() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', background: 'rgba(255,255,255,0.05)', padding: '4px 8px', borderRadius: '4px' }}>
                       {getHealthIcon(p.health)}
                       <span style={{ color: getHealthColor(p.health) }}>{p.health}</span>
+                      {getTrendIcon(p.health_trend)}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                       <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Priority Score</span>

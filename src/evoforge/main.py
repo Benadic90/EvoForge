@@ -18,8 +18,124 @@ def run_daily():
     Execute the daily autonomous loop.
     """
     logger.info("starting_daily_run")
-    typer.echo("Starting daily autonomous loop...")
-    # TODO: Implement the daily run logic
+    from evoforge.agents.factory import build_agent_registry
+    from evoforge.github_integration.client import GitHubClient
+    from evoforge.memory.database import Database
+    from evoforge.memory.manager import MemoryManager
+    from evoforge.model_router.executors import create_default_executor_registry
+    from evoforge.model_router.routing import ExecutorRouter
+    from evoforge.orchestrator.engine import OrchestratorEngine
+    from evoforge.orchestrator.workflows import WorkflowDefinition, WorkflowTask
+    from evoforge.portfolio.daily_planner import DailyPlanner
+    from evoforge.portfolio.priority_engine import PortfolioPriorityEngine
+    from evoforge.portfolio.registry import ProjectRegistry
+    from evoforge.portfolio.scanner import ProjectScanner
+    from evoforge.portfolio.task_builder import PortfolioTaskRequirementsBuilder
+    from evoforge.utils.config import load_config
+    
+    cfg = load_config()
+    db = Database(cfg.database.sqlite_path)
+    registry = ProjectRegistry(db)
+    gh_client = GitHubClient()
+    scanner = ProjectScanner(db, gh_client, registry)
+    priority_engine = PortfolioPriorityEngine(db, registry)
+    
+    console.print("[cyan]Starting daily portfolio scan...[/cyan]")
+    for p in registry.list():
+        if p.status == "MANAGED":
+            console.print(f"Scanning {p.repository_full_name}...")
+            report, raw_items = scanner.scan_project(p.project_id)
+            if raw_items:
+                priority_engine.generate_backlog(p.project_id, raw_items)
+                
+    console.print("[cyan]Ranking portfolio items...[/cyan]")
+    priority_engine.rank_projects()
+    priority_engine.rank_tasks()
+    
+    planner = DailyPlanner(db, registry)
+    plan = planner.generate_plan()
+    
+    console.print(f"[green]Daily plan generated with {len(plan.selected_tasks)} tasks.[/green]")
+    
+    if not plan.selected_tasks:
+        console.print("No actionable tasks in plan. Exiting.")
+        return
+        
+    executor_registry = create_default_executor_registry(cfg)
+    router = ExecutorRouter(executor_registry)
+    agent_registry = build_agent_registry(None, None)
+    orchestrator = OrchestratorEngine(MemoryManager(db, ""), agent_registry, router)
+    
+    for task_id in plan.execution_order:
+        # We need to fetch the task
+        query = "SELECT * FROM portfolio_tasks WHERE task_id = ?"
+        rows = db.fetchall(query, (task_id,))
+        if not rows:
+            continue
+            
+        from evoforge.portfolio.models import PortfolioTask
+        import json
+        row = dict(rows[0])
+        ptask = PortfolioTask(
+            task_id=row["task_id"],
+            canonical_task_id=row.get("canonical_task_id"),
+            project_id=row["project_id"],
+            repository_full_name=row.get("repository_full_name"),
+            title=row["title"],
+            description=row["description"],
+            source=row["source"],
+            source_type=row.get("source_type", "unknown"),
+            source_id=row["source_id"],
+            source_url=row.get("source_url"),
+            priority=row["priority"],
+            confidence=row.get("confidence", 1.0),
+            risk=row["risk"],
+            estimated_minutes=row.get("estimated_minutes"),
+            dependencies=json.loads(row["dependencies"]) if row["dependencies"] else [],
+            required_capabilities=json.loads(row["required_capabilities"]) if row["required_capabilities"] else [],
+            status=row["status"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+            metadata=json.loads(row["metadata"]) if row["metadata"] else {}
+        )
+        
+        req = PortfolioTaskRequirementsBuilder.build(ptask)
+        
+        # Route to see if we can execute
+        try:
+            chain, expl = router.get_candidate_chain(req)
+            if not chain:
+                console.print(f"[yellow]Skipping {task_id}: no valid routing candidates.[/yellow]")
+                continue
+                
+            wtask = WorkflowTask(
+                task_id=req.task_id,
+                description=ptask.title,
+                required_capabilities=req.required_capabilities,
+                assigned_executor_id=expl.selected_executor_id
+            )
+            
+            repo_name = ptask.repository_full_name or "unknown/repo"
+            wdef = WorkflowDefinition(
+                id=f"wf_{plan.plan_id}_{task_id}",
+                repo_name=repo_name,
+                tasks=[wtask],
+                dry_run=False
+            )
+            
+            console.print(f"[cyan]Executing {task_id} via Orchestrator...[/cyan]")
+            # Update task status
+            db.execute("UPDATE portfolio_tasks SET status = 'RUNNING' WHERE task_id = ?", (task_id,))
+            
+            orchestrator.execute_workflow(wdef)
+            
+            # Since execute_workflow is blocking for bounded execution, we can check state afterwards
+            db.execute("UPDATE portfolio_tasks SET status = 'COMPLETED' WHERE task_id = ?", (task_id,))
+            
+        except Exception as e:
+            console.print(f"[red]Error executing {task_id}: {e}[/red]")
+            db.execute("UPDATE portfolio_tasks SET status = 'FAILED' WHERE task_id = ?", (task_id,))
+            
     logger.info("daily_run_completed")
 
 @app.command()
@@ -477,8 +593,8 @@ def executor_stats(task_type: str = typer.Option(None, "--task-type", "-t", help
 def list_projects():
     """List all explicitly managed portfolio projects."""
     from evoforge.memory.database import Database
-    from evoforge.utils.config import load_config
     from evoforge.portfolio.registry import ProjectRegistry
+    from evoforge.utils.config import load_config
     
     cfg = load_config()
     db = Database(cfg.database.sqlite_path)
@@ -505,11 +621,12 @@ def list_projects():
 @app.command("project-add")
 def project_add(repo: str):
     """Register a GitHub repository as a managed project."""
-    from evoforge.memory.database import Database
-    from evoforge.utils.config import load_config
-    from evoforge.portfolio.registry import ProjectRegistry
-    from evoforge.portfolio.models import ProjectProfile
     import uuid
+
+    from evoforge.memory.database import Database
+    from evoforge.portfolio.models import ProjectProfile
+    from evoforge.portfolio.registry import ProjectRegistry
+    from evoforge.utils.config import load_config
     
     cfg = load_config()
     db = Database(cfg.database.sqlite_path)
@@ -540,8 +657,8 @@ def project_add(repo: str):
 def project_remove(repo: str):
     """Remove a repository from the managed portfolio."""
     from evoforge.memory.database import Database
-    from evoforge.utils.config import load_config
     from evoforge.portfolio.registry import ProjectRegistry
+    from evoforge.utils.config import load_config
     
     cfg = load_config()
     db = Database(cfg.database.sqlite_path)
@@ -560,8 +677,8 @@ def project_remove(repo: str):
 def project_show(project_id: str):
     """Show detailed portfolio metrics for a project."""
     from evoforge.memory.database import Database
-    from evoforge.utils.config import load_config
     from evoforge.portfolio.registry import ProjectRegistry
+    from evoforge.utils.config import load_config
     
     cfg = load_config()
     db = Database(cfg.database.sqlite_path)
@@ -584,11 +701,11 @@ def project_show(project_id: str):
 @app.command("portfolio-scan")
 def portfolio_scan():
     """Scan all managed projects to update health and roadmap state."""
+    from evoforge.github_integration.client import GitHubClient
     from evoforge.memory.database import Database
-    from evoforge.utils.config import load_config
     from evoforge.portfolio.registry import ProjectRegistry
     from evoforge.portfolio.scanner import ProjectScanner
-    from evoforge.github_integration.client import GitHubClient
+    from evoforge.utils.config import load_config
     
     cfg = load_config()
     db = Database(cfg.database.sqlite_path)
@@ -610,8 +727,8 @@ def portfolio_scan():
 def portfolio_health():
     """Display an aggregated view of portfolio health."""
     from evoforge.memory.database import Database
-    from evoforge.utils.config import load_config
     from evoforge.portfolio.registry import ProjectRegistry
+    from evoforge.utils.config import load_config
     
     cfg = load_config()
     db = Database(cfg.database.sqlite_path)
@@ -624,7 +741,7 @@ def portfolio_health():
     critical = sum(1 for p in projects if p.health == "CRITICAL")
     unknown = sum(1 for p in projects if p.health == "UNKNOWN")
     
-    console.print(f"[bold cyan]Portfolio Health Overview[/bold cyan]")
+    console.print("[bold cyan]Portfolio Health Overview[/bold cyan]")
     console.print(f"Total Projects: {total}")
     console.print(f"[green]Healthy:[/green] {healthy}")
     console.print(f"[yellow]Warning:[/yellow] {warning}")
@@ -636,9 +753,9 @@ def portfolio_health():
 def portfolio_ranking():
     """Rank projects and tasks based on portfolio priority engine."""
     from evoforge.memory.database import Database
-    from evoforge.utils.config import load_config
-    from evoforge.portfolio.registry import ProjectRegistry
     from evoforge.portfolio.priority_engine import PortfolioPriorityEngine
+    from evoforge.portfolio.registry import ProjectRegistry
+    from evoforge.utils.config import load_config
     
     cfg = load_config()
     db = Database(cfg.database.sqlite_path)
@@ -665,10 +782,10 @@ def portfolio_ranking():
 def daily_plan():
     """Generate the daily portfolio plan for execution."""
     from evoforge.memory.database import Database
-    from evoforge.utils.config import load_config
-    from evoforge.portfolio.registry import ProjectRegistry
     from evoforge.portfolio.daily_planner import DailyPlanner
     from evoforge.portfolio.priority_engine import PortfolioPriorityEngine
+    from evoforge.portfolio.registry import ProjectRegistry
+    from evoforge.utils.config import load_config
     
     cfg = load_config()
     db = Database(cfg.database.sqlite_path)

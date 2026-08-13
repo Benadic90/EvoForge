@@ -1,11 +1,11 @@
-import uuid
 import json
+import uuid
 from datetime import datetime
-from typing import List, Dict, Any
+
 import structlog
 
 from evoforge.memory.database import Database
-from evoforge.portfolio.models import DailyPortfolioPlan, PortfolioRanking
+from evoforge.portfolio.models import DailyPortfolioPlan
 from evoforge.portfolio.registry import ProjectRegistry
 
 logger = structlog.get_logger(__name__)
@@ -84,17 +84,22 @@ class DailyPlanner:
         rows = self.db.fetchall(query, (task_id,))
         if not rows:
             return None
-        row = rows[0]
+        row = dict(rows[0])
         return PortfolioTask(
             task_id=row["task_id"],
+            canonical_task_id=row.get("canonical_task_id"),
             project_id=row["project_id"],
+            repository_full_name=row.get("repository_full_name"),
             title=row["title"],
             description=row["description"],
             source=row["source"],
+            source_type=row.get("source_type", "unknown"),
             source_id=row["source_id"],
+            source_url=row.get("source_url"),
             priority=row["priority"],
+            confidence=row.get("confidence", 1.0),
             risk=row["risk"],
-            estimated_effort=row["estimated_effort"],
+            estimated_minutes=row.get("estimated_minutes"),
             dependencies=json.loads(row["dependencies"]) if row["dependencies"] else [],
             required_capabilities=json.loads(row["required_capabilities"]) if row["required_capabilities"] else [],
             status=row["status"],
@@ -103,7 +108,7 @@ class DailyPlanner:
             metadata=json.loads(row["metadata"]) if row["metadata"] else {}
         )
 
-    def _has_unmet_dependencies(self, dependencies: List[str]) -> bool:
+    def _has_unmet_dependencies(self, dependencies: list[str]) -> bool:
         """Cycle detection and dependency blocking."""
         if not dependencies:
             return False

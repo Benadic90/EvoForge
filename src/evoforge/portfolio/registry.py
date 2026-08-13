@@ -1,4 +1,4 @@
-from typing import List, Optional
+
 import structlog
 
 from evoforge.memory.database import Database
@@ -54,21 +54,21 @@ class ProjectRegistry:
         self.db.execute(query, params)
         logger.info("project_registered", project_id=profile.project_id, repo=profile.repository_full_name)
 
-    def get(self, project_id: str) -> Optional[ProjectProfile]:
+    def get(self, project_id: str) -> ProjectProfile | None:
         query = "SELECT * FROM projects WHERE project_id = ?"
         rows = self.db.fetchall(query, (project_id,))
         if not rows:
             return None
         return self._row_to_profile(rows[0])
 
-    def get_by_repo(self, repository_full_name: str) -> Optional[ProjectProfile]:
+    def get_by_repo(self, repository_full_name: str) -> ProjectProfile | None:
         query = "SELECT * FROM projects WHERE repository_full_name = ?"
         rows = self.db.fetchall(query, (repository_full_name,))
         if not rows:
             return None
         return self._row_to_profile(rows[0])
 
-    def list(self) -> List[ProjectProfile]:
+    def list(self) -> list[ProjectProfile]:
         query = "SELECT * FROM projects"
         rows = self.db.fetchall(query)
         return [self._row_to_profile(row) for row in rows]
@@ -79,22 +79,43 @@ class ProjectRegistry:
         logger.info("project_removed", project_id=project_id)
 
     def enable(self, project_id: str) -> None:
-        query = "UPDATE projects SET status = 'ACTIVE', updated_at = CURRENT_TIMESTAMP WHERE project_id = ?"
+        query = "UPDATE projects SET status = 'MANAGED', updated_at = CURRENT_TIMESTAMP WHERE project_id = ?"
         self.db.execute(query, (project_id,))
         logger.info("project_enabled", project_id=project_id)
 
     def disable(self, project_id: str) -> None:
-        query = "UPDATE projects SET status = 'DISABLED', updated_at = CURRENT_TIMESTAMP WHERE project_id = ?"
+        query = "UPDATE projects SET status = 'PAUSED', updated_at = CURRENT_TIMESTAMP WHERE project_id = ?"
         self.db.execute(query, (project_id,))
         logger.info("project_disabled", project_id=project_id)
+
+    def get_health_trend(self, project_id: str) -> str:
+        """Calculate the project health trend based on historical snapshots."""
+        query = "SELECT overall_health FROM project_health_history WHERE project_id = ? ORDER BY timestamp DESC LIMIT 3"
+        rows = self.db.fetchall(query, (project_id,))
+        if len(rows) < 2:
+            return "UNKNOWN"
+            
+        health_scores = {"CRITICAL": 0, "WARNING": 1, "HEALTHY": 2, "UNKNOWN": 1}
+        current_score = health_scores.get(rows[0]["overall_health"], 1)
+        prev_score = health_scores.get(rows[1]["overall_health"], 1)
+        
+        if current_score > prev_score:
+            return "IMPROVING"
+        elif current_score < prev_score:
+            return "DECLINING"
+        else:
+            return "STABLE"
 
     def _row_to_profile(self, row: dict) -> ProjectProfile:
         import json
         metadata_str = row["metadata"]
         metadata = json.loads(metadata_str) if metadata_str else {}
         
+        project_id = row["project_id"]
+        health_trend = self.get_health_trend(project_id)
+        
         return ProjectProfile(
-            project_id=row["project_id"],
+            project_id=project_id,
             repository_full_name=row["repository_full_name"],
             repository_url=row["repository_url"],
             owner=row["owner"],
@@ -103,9 +124,10 @@ class ProjectRegistry:
             description=row["description"],
             vision=row["vision"],
             status=row["status"],
-            importance=row["importance"],
+            importance=str(row["importance"]),
             priority_score=row["priority_score"],
             health=row["health"],
+            health_trend=health_trend,
             ci_health=row["ci_health"],
             security_health=row["security_health"],
             test_health=row["test_health"],
