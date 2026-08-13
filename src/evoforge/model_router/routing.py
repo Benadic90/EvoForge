@@ -149,7 +149,28 @@ class ExecutorRouter:
 
         task_type_str = req.task_type.value if hasattr(req.task_type, "value") else str(req.task_type)
 
+        # 0. Fetch ComputePolicy
+        from evoforge.model_router.compute_policy import ComputePolicy
+        if self.memory and hasattr(self.memory, "get_setting"):
+            compute_policy = ComputePolicy.load_from_db(self.memory)
+        else:
+            compute_policy = ComputePolicy()
+
         for exc_id in candidates:
+            # Check ComputePolicy restrictions
+            is_cloud = "gemini" in exc_id or "nvidia" in exc_id
+            is_local = "ollama" in exc_id or "local" in exc_id
+            
+            if compute_policy.mode == "LOCAL" and is_cloud:
+                rejected[exc_id] = ["Executor rejected by LOCAL Compute Mode."]
+                continue
+            if compute_policy.mode == "CLOUD" and is_local:
+                rejected[exc_id] = ["Executor rejected by CLOUD Compute Mode."]
+                continue
+            if is_local and not compute_policy.ollama_enabled:
+                rejected[exc_id] = ["Local executor explicitly disabled by policy."]
+                continue
+
             # 1. Check Circuit Breaker & Health
             if not self.registry.is_enabled(exc_id):
                 rejected[exc_id] = ["Executor is administratively disabled."]

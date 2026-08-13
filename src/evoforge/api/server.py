@@ -728,6 +728,37 @@ def api_get_all_tasks(limit: int = Query(50, ge=1, le=100), offset: int = Query(
         ))
     return tasks
 
+# --- Settings & Compute Mode Endpoints ---
+
+from evoforge.model_router.compute_policy import ComputePolicy
+
+@app.get("/api/settings/compute", response_model=ComputePolicy)
+def api_get_compute_policy() -> ComputePolicy:
+    policy = ComputePolicy.load_from_db(db)
+    
+    # Check actual Ollama health dynamically
+    if "local" not in executor_registry.list_all():
+        policy.ollama_status = "UNAVAILABLE"
+    else:
+        policy.ollama_status = "AVAILABLE" if executor_registry.is_healthy("local") else "DEGRADED"
+        
+    return policy
+
+@app.post("/api/settings/compute", response_model=ComputePolicy)
+def api_update_compute_policy(policy: ComputePolicy) -> ComputePolicy:
+    policy.save_to_db(db)
+    
+    # Return updated policy with live status
+    if "local" not in executor_registry.list_all():
+        policy.ollama_status = "UNAVAILABLE"
+    else:
+        policy.ollama_status = "AVAILABLE" if executor_registry.is_healthy("local") else "DEGRADED"
+    
+    return policy
+
+@app.put("/api/settings/compute", response_model=ComputePolicy)
+def api_put_compute_policy(policy: ComputePolicy) -> ComputePolicy:
+    return api_update_compute_policy(policy)
 
 # --- Phase 5 Learning & Evolution Endpoints ---
 

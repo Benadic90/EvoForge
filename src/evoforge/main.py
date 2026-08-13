@@ -979,6 +979,63 @@ def evolution_rollback(proposal_id: str):
     else:
         console.print(f"[red]Failed to roll back {full_id}.[/red]")
 
+@app.command("compute-status")
+def compute_status():
+    """Show current compute execution mode and settings."""
+    from evoforge.memory.database import Database
+    from evoforge.model_router.compute_policy import ComputePolicy
+    from evoforge.model_router.executors import create_default_executor_registry
+    from evoforge.utils.config import load_config
+    
+    cfg = load_config()
+    db = Database(cfg.database.sqlite_path)
+    policy = ComputePolicy.load_from_db(db)
+    registry = create_default_executor_registry(cfg)
+    
+    table = Table(title="Compute Mode Status")
+    table.add_column("Property", style="cyan")
+    table.add_column("Value", style="green")
+    
+    table.add_row("Mode", policy.mode)
+    table.add_row("Allow Local", str(policy.allow_local))
+    table.add_row("Allow Cloud", str(policy.allow_cloud))
+    table.add_row("Prefer Local", str(policy.prefer_local))
+    table.add_row("Ollama Configured", str(policy.ollama_enabled))
+    if "local" in registry.list_all():
+        healthy = registry.is_healthy("local")
+        table.add_row("Ollama Live Status", "[green]AVAILABLE[/green]" if healthy else "[red]DEGRADED/UNAVAILABLE[/red]")
+    else:
+        table.add_row("Ollama Live Status", "[yellow]UNAVAILABLE[/yellow]")
+        
+    console.print(table)
+
+
+@app.command("compute-mode")
+def compute_mode(mode: str = typer.Argument(..., help="Mode: local, cloud, or hybrid")):
+    """Set the system compute execution mode."""
+    mode = mode.upper()
+    if mode not in ["LOCAL", "CLOUD", "HYBRID"]:
+        console.print(f"[red]Invalid mode '{mode}'. Must be LOCAL, CLOUD, or HYBRID.[/red]")
+        raise typer.Exit(code=1)
+        
+    from evoforge.memory.database import Database
+    from evoforge.model_router.compute_policy import ComputePolicy
+    from evoforge.utils.config import load_config
+    
+    cfg = load_config()
+    db = Database(cfg.database.sqlite_path)
+    policy = ComputePolicy.load_from_db(db)
+    
+    policy.mode = mode
+    policy.allow_local = mode in ["LOCAL", "HYBRID"]
+    policy.allow_cloud = mode in ["CLOUD", "HYBRID"]
+    
+    policy.save_to_db(db)
+    
+    console.print(f"[green]Successfully updated compute mode to {mode}.[/green]")
+    compute_status()
+
+
 if __name__ == "__main__":
     app()
 

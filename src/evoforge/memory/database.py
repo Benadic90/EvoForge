@@ -8,6 +8,13 @@ logger = structlog.get_logger(__name__)
 
 
 SCHEMA = """
+-- System Settings
+CREATE TABLE IF NOT EXISTS system_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Core execution state
 CREATE TABLE IF NOT EXISTS workflows (
     id TEXT PRIMARY KEY,
@@ -895,4 +902,24 @@ class Database:
             "complete_workflows": complete_wf,
             "recent_failures": [dict(f) for f in fail_rows],
         }
+
+    def set_setting(self, key: str, value: str) -> None:
+        """Set a persistent system setting."""
+        self.execute(
+            """
+            INSERT INTO system_settings (key, value)
+            VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+                value=excluded.value,
+                updated_at=CURRENT_TIMESTAMP
+            """,
+            (key, value)
+        )
+
+    def get_setting(self, key: str, default: str | None = None) -> str | None:
+        """Get a persistent system setting."""
+        rows = self.fetchall("SELECT value FROM system_settings WHERE key = ?", (key,))
+        if rows:
+            return rows[0]["value"]
+        return default
 
