@@ -1107,6 +1107,7 @@ def get_github_status():
             return GitHubStatusResponse(configured=False, username=None)
     
     # Optional: Verify token via GitHub API
+    return GitHubStatusResponse(configured=True, username=None)
 
 @app.put("/api/llm/keys", dependencies=[Depends(get_worker_token)])
 def set_llm_key(update: LLMKeyUpdate):

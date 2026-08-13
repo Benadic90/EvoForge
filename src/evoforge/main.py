@@ -63,7 +63,7 @@ def run_daily():
         console.print("No actionable tasks in plan. Exiting.")
         return
         
-    executor_registry = create_default_executor_registry(cfg)
+    executor_registry = create_default_executor_registry(cfg, db=db)
     router = ExecutorRouter(executor_registry)
     agent_registry = build_agent_registry(None, None)
     orchestrator = OrchestratorEngine(MemoryManager(db, ""), agent_registry, router)
