@@ -32,4 +32,4 @@ RUN mkdir -p /app/data
 EXPOSE 8000
 
 # Start the EvoForge FastAPI control plane
-CMD ["sh", "-c", "uv run python -m evoforge.main serve --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "uv run python -m evoforge.main server --host 0.0.0.0 --port ${PORT:-8000}"]
