@@ -1,11 +1,13 @@
+
 import pytest
-import json
+
+from evoforge.agents.capabilities import AgentCapability
 from evoforge.memory.database import Database
 from evoforge.model_router.compute_policy import ComputePolicy
+from evoforge.model_router.executors import ExecutorRegistry, GeminiExecutor, LocalModelExecutor
+from evoforge.model_router.requirements import TaskClassification, TaskRequirements
 from evoforge.model_router.routing import ExecutorRouter
-from evoforge.model_router.executors import ExecutorRegistry, LocalModelExecutor, GeminiExecutor
-from evoforge.model_router.requirements import TaskRequirements, TaskClassification
-from evoforge.agents.capabilities import AgentCapability
+
 
 @pytest.fixture
 def test_db(tmp_path):

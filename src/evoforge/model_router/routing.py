@@ -74,9 +74,10 @@ class ExecutorRouter:
 
     POLICY_VERSION = "adaptive-v1"
 
-    def __init__(self, executor_registry: ExecutorRegistry, memory_manager: Any = None):
+    def __init__(self, executor_registry: ExecutorRegistry, memory_manager: Any = None, worker_registry: Any = None):
         self.registry = executor_registry
         self.memory = memory_manager
+        self.worker_registry = worker_registry
         self.circuit_breaker = CircuitBreaker()
         self.weights = {
             "capability_match": 0.35,
@@ -156,6 +157,12 @@ class ExecutorRouter:
         else:
             compute_policy = ComputePolicy()
 
+        # 0.5 Check Laptop Worker availability (if worker_registry is provided)
+        laptop_online = True
+        if self.worker_registry:
+            active_workers = self.worker_registry.list_active()
+            laptop_online = any(w.worker_type.value == "LAPTOP" for w in active_workers)
+
         for exc_id in candidates:
             # Check ComputePolicy restrictions
             is_cloud = "gemini" in exc_id or "nvidia" in exc_id
@@ -169,6 +176,9 @@ class ExecutorRouter:
                 continue
             if is_local and not compute_policy.ollama_enabled:
                 rejected[exc_id] = ["Local executor explicitly disabled by policy."]
+                continue
+            if is_local and not laptop_online:
+                rejected[exc_id] = ["Laptop worker is offline."]
                 continue
 
             # 1. Check Circuit Breaker & Health

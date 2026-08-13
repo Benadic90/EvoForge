@@ -2,7 +2,6 @@ import os
 import shutil
 import time
 import uuid
-import threading
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -10,8 +9,7 @@ from typing import Any
 
 import structlog
 
-from evoforge.evolution.experiment import ExperimentFramework, ExperimentRecord, MultiMetricScore
-from evoforge.learning.models import PracticePlan
+from evoforge.evolution.experiment import ExperimentFramework, ExperimentRecord
 from evoforge.memory.obsidian import ObsidianManager
 
 logger = structlog.get_logger(__name__)

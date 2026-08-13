@@ -1,7 +1,7 @@
 import time
 from collections.abc import Callable
-from typing import Any
 from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 from pydantic import BaseModel

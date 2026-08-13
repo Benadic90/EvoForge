@@ -1,10 +1,10 @@
-import structlog
 from datetime import UTC, datetime
 
-from evoforge.memory.database import Database
-from evoforge.learning.skill_versioner import SkillVersioner
+import structlog
+
 from evoforge.learning.skill_registry import SkillRegistry
-from evoforge.learning.models import EvolutionTarget
+from evoforge.learning.skill_versioner import SkillVersioner
+from evoforge.memory.database import Database
 
 logger = structlog.get_logger(__name__)
 

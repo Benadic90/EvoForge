@@ -1,11 +1,13 @@
 import json
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import Any
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from evoforge.agents.factory import build_agent_registry
 from evoforge.api.models import (
@@ -24,7 +26,16 @@ from evoforge.api.models import (
 from evoforge.memory.database import Database
 from evoforge.memory.events import SQLiteEventStore, emitter
 from evoforge.model_router.executors import create_default_executor_registry
+from evoforge.runtime.scheduler import SchedulerEngine
+from evoforge.runtime.worker import WorkerHealth, WorkerProfile, WorkerRegistry, WorkerStatus
 from evoforge.utils.config import load_config
+
+security = HTTPBearer()
+def get_worker_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    expected_token = os.environ.get("WORKER_SECRET_TOKEN", "default-dev-token")
+    if credentials.credentials != expected_token:
+        raise HTTPException(status_code=401, detail="Invalid worker token")
+    return credentials.credentials
 
 # Setup database & registries
 config = load_config()
@@ -32,6 +43,8 @@ db = Database(config.database.sqlite_path)
 emitter.store = SQLiteEventStore(db)
 agent_registry = build_agent_registry(None, None)
 executor_registry = create_default_executor_registry(config)
+worker_registry = WorkerRegistry(db)
+scheduler = SchedulerEngine(db, None, None)
 
 
 
@@ -120,6 +133,98 @@ def list_agents() -> list[AgentStatusResponse]:
 
     return agents_res
 
+
+# --- WORKER API ---
+
+@app.get("/api/workers")
+def list_workers():
+    workers = worker_registry.list_all()
+    return {"workers": [w.model_dump() for w in workers]}
+
+@app.post("/api/workers/register")
+def register_worker(profile: dict, token: str = Depends(get_worker_token)):
+    wp = WorkerProfile(**profile)
+    worker_registry.register(wp)
+    return {"status": "registered"}
+
+@app.post("/api/workers/{worker_id}/heartbeat")
+def worker_heartbeat(worker_id: str, payload: dict, token: str = Depends(get_worker_token)):
+    status = WorkerStatus(payload["status"]) if "status" in payload else None
+    health = WorkerHealth(payload["health"]) if "health" in payload else None
+    current_workflow_id = payload.get("current_workflow_id")
+    current_task_id = payload.get("current_task_id")
+    
+    worker_registry.heartbeat(worker_id, status, health, current_workflow_id, current_task_id)
+    return {"status": "heartbeat_ok"}
+
+@app.post("/api/workers/{worker_id}/drain")
+def drain_worker(worker_id: str, token: str = Depends(get_worker_token)):
+    worker_registry.drain(worker_id)
+    return {"status": "draining"}
+
+@app.post("/api/workers/{worker_id}/request-work")
+def request_work(worker_id: str, token: str = Depends(get_worker_token)):
+    # Very simple queue polling: find pending workflow, try to lease it.
+    from datetime import UTC, datetime
+    now = datetime.now(UTC).isoformat()
+    # Find one pending workflow
+    query = "SELECT id, state_snapshot FROM workflows WHERE status = 'pending' LIMIT 1"
+    rows = db.fetchall(query)
+    if rows:
+        wf_id = rows[0]["id"]
+        # Try to atomically acquire it
+        update_q = "UPDATE workflows SET status = 'running', worker_id = ? WHERE id = ? AND status = 'pending'"
+        db.execute(update_q, (worker_id, wf_id))
+        
+        # Check if we got it
+        check = db.fetchall("SELECT worker_id, state_snapshot, project FROM workflows WHERE id = ?", (wf_id,))
+        if check and check[0]["worker_id"] == worker_id:
+            # We got it! Reconstruct payload for worker
+            task_query = "SELECT id, title, description, required_capabilities, task_type FROM tasks WHERE assigned_workflow = ?"
+            task_rows = db.fetchall(task_query, (wf_id,))
+            tasks = []
+            for tr in task_rows:
+                tasks.append({
+                    "id": tr["id"],
+                    "description": tr["title"] or tr["description"],
+                    "required_capabilities": json.loads(tr["required_capabilities"]) if tr.get("required_capabilities") else [],
+                    "agent_type": tr["task_type"]
+                })
+            
+            return {
+                "workflow": {
+                    "id": wf_id,
+                    "repo_name": check[0]["project"],
+                    "tasks": tasks,
+                    "state_snapshot": check[0]["state_snapshot"]
+                }
+            }
+            
+    return {"workflow": None}
+    
+@app.post("/api/workers/{worker_id}/release-work")
+def release_work(worker_id: str, payload: dict, token: str = Depends(get_worker_token)):
+    wf_id = payload.get("workflow_id")
+    if wf_id:
+        db.execute("UPDATE workflows SET worker_id = NULL WHERE id = ? AND worker_id = ?", (wf_id, worker_id))
+    return {"status": "released"}
+
+
+# --- SCHEDULER API ---
+
+@app.get("/api/scheduler/status")
+def get_scheduler_status():
+    return scheduler.get_status()
+
+@app.get("/api/runtime/status")
+def get_runtime_status():
+    st = scheduler.get_status()
+    workers = worker_registry.list_all()
+    return {
+        "scheduler": st,
+        "workers_online": len([w for w in workers if w.status != WorkerStatus.OFFLINE]),
+        "workers_total": len(workers)
+    }
 
 @app.get("/api/agents/{agent_id}", response_model=AgentStatusResponse)
 def get_agent(agent_id: str) -> AgentStatusResponse:
@@ -732,6 +837,7 @@ def api_get_all_tasks(limit: int = Query(50, ge=1, le=100), offset: int = Query(
 
 from evoforge.model_router.compute_policy import ComputePolicy
 
+
 @app.get("/api/settings/compute", response_model=ComputePolicy)
 def api_get_compute_policy() -> ComputePolicy:
     policy = ComputePolicy.load_from_db(db)
@@ -853,15 +959,16 @@ def api_list_experiments(limit: int = Query(50, ge=1, le=100), offset: int = Que
 
 from pydantic import BaseModel
 
+
 class ApprovalRequest(BaseModel):
     deployment_type: str = "FULL"
 
 @app.post("/api/evolution/proposals/{proposal_id}/approve")
 def api_approve_proposal(proposal_id: str, req: ApprovalRequest):
-    from evoforge.evolution.pipeline import EvolutionPipeline
-    from evoforge.learning.models import ApprovalPolicy
     from evoforge.evolution.experiment import ExperimentFramework
+    from evoforge.evolution.pipeline import EvolutionPipeline
     from evoforge.evolution.rollback import RollbackManager
+    from evoforge.learning.models import ApprovalPolicy
     from evoforge.learning.skill_registry import SkillRegistry
     
     registry = SkillRegistry(db)

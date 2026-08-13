@@ -3,6 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+
 class ComputePolicy(BaseModel):
     mode: Literal["LOCAL", "CLOUD", "HYBRID"] = "HYBRID"
     allow_local: bool = True

@@ -15,6 +15,45 @@ CREATE TABLE IF NOT EXISTS system_settings (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Workers Registry
+CREATE TABLE IF NOT EXISTS workers (
+    worker_id TEXT PRIMARY KEY,
+    worker_type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    capabilities TEXT,
+    compute_mode TEXT,
+    hostname TEXT,
+    version TEXT,
+    registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_heartbeat_at TIMESTAMP,
+    last_seen_at TIMESTAMP,
+    current_workflow_id TEXT,
+    current_task_id TEXT,
+    health TEXT DEFAULT 'UNKNOWN',
+    metadata TEXT
+);
+
+-- Worker Heartbeats
+CREATE TABLE IF NOT EXISTS worker_heartbeats (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    worker_id TEXT NOT NULL REFERENCES workers(worker_id) ON DELETE CASCADE,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status TEXT,
+    health TEXT,
+    current_workflow_id TEXT
+);
+
+-- Scheduler State
+CREATE TABLE IF NOT EXISTS scheduler_state (
+    scheduler_id TEXT PRIMARY KEY,
+    last_tick TIMESTAMP,
+    last_success TIMESTAMP,
+    last_failure TIMESTAMP,
+    next_run TIMESTAMP,
+    status TEXT NOT NULL DEFAULT 'STOPPED',
+    version TEXT
+);
+
 -- Core execution state
 CREATE TABLE IF NOT EXISTS workflows (
     id TEXT PRIMARY KEY,

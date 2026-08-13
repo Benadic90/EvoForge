@@ -919,10 +919,10 @@ def evolution_ls():
 @evolution_app.command("deploy")
 def evolution_deploy(proposal_id: str, shadow: bool = False, canary: bool = False, full: bool = False):
     """Deploy an evolution proposal."""
-    from evoforge.memory.database import Database
-    from evoforge.utils.config import load_config
     from evoforge.evolution.pipeline import EvolutionPipeline
     from evoforge.learning.models import ApprovalPolicy
+    from evoforge.memory.database import Database
+    from evoforge.utils.config import load_config
     
     cfg = load_config()
     db = Database(cfg.database.sqlite_path)
@@ -948,16 +948,15 @@ def evolution_deploy(proposal_id: str, shadow: bool = False, canary: bool = Fals
         pipeline.deploy_candidate(prop, deployment_type=mode)
         console.print(f"[green]Successfully deployed {full_id} as {mode}.[/green]")
     except Exception as e:
-        console.print(f"[red]Deployment failed: {str(e)}[/red]")
+        console.print(f"[red]Deployment failed: {e!s}[/red]")
 
 @evolution_app.command("rollback")
 def evolution_rollback(proposal_id: str):
     """Roll back a deployed evolution proposal."""
+    from evoforge.evolution.rollback import RollbackManager
+    from evoforge.learning.skill_registry import SkillRegistry
     from evoforge.memory.database import Database
     from evoforge.utils.config import load_config
-    from evoforge.evolution.rollback import RollbackManager
-    from evoforge.agents.factory import build_agent_registry
-    from evoforge.learning.skill_registry import SkillRegistry
     
     cfg = load_config()
     db = Database(cfg.database.sqlite_path)
@@ -1035,6 +1034,180 @@ def compute_mode(mode: str = typer.Argument(..., help="Mode: local, cloud, or hy
     console.print(f"[green]Successfully updated compute mode to {mode}.[/green]")
     compute_status()
 
+@app.command("server")
+def run_server(port: int = 8000, host: str = "127.0.0.1"):
+    """Run the headless control plane API server."""
+    import uvicorn
+    console.print(f"[green]Starting EvoForge Control Plane on {host}:{port}[/green]")
+    uvicorn.run("evoforge.api.server:app", host=host, port=port, log_level="info")
+
+@app.command("scheduler")
+def run_scheduler(interval: int = 3600):
+    """Run the headless persistent cloud scheduler."""
+    from evoforge.memory.database import Database
+    from evoforge.runtime.scheduler import SchedulerEngine
+    from evoforge.utils.config import load_config
+    
+    cfg = load_config()
+    db = Database(cfg.database.sqlite_path)
+    # The actual gh_client and learning_system should ideally be built here, 
+    # but for now we pass None or minimal mocks as done in run_daily.
+    scheduler = SchedulerEngine(db, None, None)
+    
+    import signal
+    import sys
+    
+    def signal_handler(sig, frame):
+        console.print("[yellow]Stopping scheduler gracefully...[/yellow]")
+        scheduler.stop()
+        sys.exit(0)
+        
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    console.print(f"[green]Starting EvoForge Scheduler (tick interval: {interval}s)[/green]")
+    scheduler.start(interval_seconds=interval)
+
+@app.command("worker")
+def run_worker(type: str = typer.Option("cloud", help="Worker type: cloud or laptop"),
+               worker_id: str = typer.Option(None, help="Unique worker ID"),
+               control_plane: str = typer.Option("http://127.0.0.1:8000", help="Control Plane URL")):
+    """Run a headless worker node."""
+    import os
+    import uuid
+
+    from evoforge.agents.factory import build_agent_registry
+    from evoforge.memory.database import Database
+    from evoforge.memory.manager import MemoryManager
+    from evoforge.model_router.executors import create_default_executor_registry
+    from evoforge.model_router.routing import ExecutorRouter
+    from evoforge.orchestrator.engine import OrchestratorEngine
+    from evoforge.runtime.worker_node import CloudWorkerNode, LaptopWorkerNode
+    from evoforge.utils.config import load_config
+    
+    if not worker_id:
+        worker_id = f"worker-{uuid.uuid4().hex[:8]}"
+        
+    token = os.environ.get("WORKER_SECRET_TOKEN", "default-dev-token")
+    
+    cfg = load_config()
+    db = Database(cfg.database.sqlite_path)
+    
+    exec_registry = create_default_executor_registry(cfg)
+    # For a pure worker, it just executes, but it needs the router for sub-task model routing
+    router = ExecutorRouter(exec_registry, MemoryManager(db, ""))
+    agent_registry = build_agent_registry(None, None)
+    orchestrator = OrchestratorEngine(MemoryManager(db, ""), agent_registry, router)
+    
+    if type.lower() == "laptop":
+        node = LaptopWorkerNode(orchestrator, control_plane, worker_id, token)
+    else:
+        node = CloudWorkerNode(orchestrator, control_plane, worker_id, token)
+        
+    import signal
+    import sys
+    
+    def signal_handler(sig, frame):
+        console.print("[yellow]Stopping worker gracefully...[/yellow]")
+        node.stop()
+        sys.exit(0)
+        
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    console.print(f"[green]Starting {type.upper()} worker ({worker_id}) connecting to {control_plane}...[/green]")
+    node.run()
+
+@app.command("worker-status")
+def worker_status():
+    """Show the status of all registered workers."""
+    import os
+
+    import httpx
+    token = os.environ.get("WORKER_SECRET_TOKEN", "default-dev-token")
+    try:
+        resp = httpx.get("http://127.0.0.1:8000/api/workers", headers={"Authorization": f"Bearer {token}"})
+        resp.raise_for_status()
+        workers = resp.json()["workers"]
+        table = Table(title="Worker Registry Status")
+        table.add_column("Worker ID")
+        table.add_column("Type")
+        table.add_column("Status")
+        table.add_column("Health")
+        table.add_column("Workflow")
+        
+        for w in workers:
+            table.add_row(w["worker_id"], w["worker_type"], w["status"], w["health"], w.get("current_workflow_id") or "-")
+            
+        console.print(table)
+    except Exception as e:
+        console.print(f"[red]Error fetching worker status: {e}[/red]")
+
+@app.command("worker-drain")
+def worker_drain(worker_id: str):
+    """Gracefully drain a worker."""
+    import os
+
+    import httpx
+    token = os.environ.get("WORKER_SECRET_TOKEN", "default-dev-token")
+    try:
+        resp = httpx.post(f"http://127.0.0.1:8000/api/workers/{worker_id}/drain", headers={"Authorization": f"Bearer {token}"})
+        resp.raise_for_status()
+        console.print(f"[green]Worker {worker_id} is draining.[/green]")
+    except Exception as e:
+        console.print(f"[red]Error draining worker: {e}[/red]")
+        
+@app.command("scheduler-status")
+def scheduler_status():
+    """Show the status of the cloud scheduler."""
+    import httpx
+    try:
+        resp = httpx.get("http://127.0.0.1:8000/api/scheduler/status")
+        resp.raise_for_status()
+        st = resp.json()
+        table = Table(title="Scheduler Status")
+        for k, v in st.items():
+            table.add_row(str(k), str(v))
+        console.print(table)
+    except Exception as e:
+        console.print(f"[red]Error fetching scheduler status: {e}[/red]")
+
+@app.command("runtime-status")
+def runtime_status():
+    """Show overall runtime status including workers and scheduler."""
+    import httpx
+    try:
+        resp = httpx.get("http://127.0.0.1:8000/api/runtime/status")
+        resp.raise_for_status()
+        st = resp.json()
+        
+        console.print("\n[bold cyan]EvoForge Runtime Status[/bold cyan]")
+        console.print(f"Scheduler: {st['scheduler'].get('status', 'UNKNOWN')}")
+        console.print(f"Workers Online: {st['workers_online']} / {st['workers_total']}\n")
+    except Exception as e:
+        console.print(f"[red]Error fetching runtime status: {e}[/red]")
+
+@app.command("runtime-pause")
+def runtime_pause():
+    """Emergency global pause of the runtime scheduler."""
+    from evoforge.memory.database import Database
+    from evoforge.runtime.scheduler import SchedulerEngine
+    from evoforge.utils.config import load_config
+    cfg = load_config()
+    db = Database(cfg.database.sqlite_path)
+    sch = SchedulerEngine(db, None, None)
+    sch.pause()
+    console.print("[yellow]Global Emergency Pause Activated.[/yellow]")
+
+@app.command("runtime-resume")
+def runtime_resume():
+    """Resume the runtime scheduler."""
+    from evoforge.memory.database import Database
+    from evoforge.runtime.scheduler import SchedulerEngine
+    from evoforge.utils.config import load_config
+    cfg = load_config()
+    db = Database(cfg.database.sqlite_path)
+    sch = SchedulerEngine(db, None, None)
+    sch.resume()
+    console.print("[green]Global Emergency Pause Deactivated.[/green]")
 
 if __name__ == "__main__":
     app()

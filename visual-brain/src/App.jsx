@@ -12,6 +12,7 @@ import PortfolioView from './PortfolioView';
 import LearningView from './LearningView';
 import EvolutionView from './EvolutionView';
 import Settings from './Settings';
+import RuntimeView from './RuntimeView';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -146,6 +147,10 @@ export default function App() {
     
     if (activeTab === 'evolution') {
       return <EvolutionView />;
+    }
+    
+    if (activeTab === 'runtime') {
+      return <RuntimeView />;
     }
     
     if (activeTab === 'settings') {
