@@ -718,6 +718,23 @@ def api_add_project(req: ProjectAddRequest) -> ProjectProfile:
     registry.register(profile)
     return profile
 
+@app.get("/api/force-run-daily")
+def api_force_run_daily():
+    """Forces the daily AI agent loop to run immediately in the background."""
+    import threading
+    from evoforge.main import run_daily
+    
+    def background_task():
+        try:
+            run_daily()
+        except Exception as e:
+            logging.error(f"Background run_daily failed: {e}")
+            
+    thread = threading.Thread(target=background_task)
+    thread.daemon = True
+    thread.start()
+    return {"status": "success", "message": "The AI Agent has been awoken and is now running in the background."}
+
 @app.get("/api/projects/{project_id}", response_model=ProjectProfile)
 def api_get_project(project_id: str) -> ProjectProfile:
     from evoforge.portfolio.registry import ProjectRegistry
