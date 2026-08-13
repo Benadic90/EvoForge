@@ -75,46 +75,40 @@ graph TD
 
 ## 🚀 Getting Started
 
-Follow these steps to spin up the entire EvoForge ecosystem like a professional.
+Follow these steps to spin up the entire EvoForge ecosystem using the Free Tier of Render and your Android phone.
 
-### 1. Backend Setup
+### 1. Cloud Backend Setup (Render)
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/Benadic90/EvoForge.git
-   cd EvoForge
-   ```
+EvoForge is designed to run 24/7 in the cloud so it can maintain your GitHub streak while you sleep.
 
-2. **Configure Environment Variables**:
-   Copy the example template and add your LLM API keys:
-   ```bash
-   cp .env.example .env
-   ```
-   *Edit `.env` and insert your `GEMINI_API_KEY` and `NVIDIA_API_KEY`.*
+1. Fork this repository to your own GitHub account.
+2. Go to [Render.com](https://render.com) and create a new **Web Service**.
+3. Connect your GitHub account and select your EvoForge fork.
+4. Set the **Build Command** to: `curl -LsSf https://astral.sh/uv/install.sh | sh && /opt/render/.cargo/bin/uv sync`
+5. Set the **Start Command** to: `/opt/render/.cargo/bin/uv run python -m evoforge.main server`
+6. **Environment Variables**: You must add the following environment variables in your Render dashboard:
+   - `GITHUB_TOKEN`: Your Personal Access Token (classic) with `repo` permissions.
+   - `GEMINI_API_KEY`: Your Gemini AI API Key.
+   - `WORKER_SECRET_TOKEN`: Set this to `default-dev-token` (this secures your connection to the Android app).
+7. Click **Deploy**. Wait until Render gives you a URL (e.g., `https://evoforge.onrender.com`).
 
-3. **Install Dependencies & Run**:
-   EvoForge uses `uv` for lightning-fast Python dependency management.
-   ```bash
-   uv run python -m evoforge.main serve
-   ```
-   *The control plane is now running on `0.0.0.0:8000`.*
+### 2. Mobile App Setup (Android)
 
-### 2. Mobile App Setup
+The Android app is your "Mission Control" to command the AI agent.
 
 1. Open the `android/EvoForgeAndroid` folder in **Android Studio**.
-2. Build and flash the APK to your Android device (Android 14+ recommended).
-3. Ensure your phone and PC are on the same Wi-Fi network.
-4. In the app, go to the **Settings** tab.
-5. Set the **Control Plane URL** to your PC's local IP (e.g., `http://192.168.1.5:8000`).
-6. Enter a valid GitHub Personal Access Token (PAT) and tap **Verify & Save**.
+2. Build and install the APK onto your Android phone.
+3. Open the app and go to the **Settings** tab.
+4. Set the **Control Plane URL** to your exact Render URL (e.g., `https://evoforge.onrender.com`).
+5. Set your **GitHub PAT** and tap **Verify & Save**.
 
-### 3. Add a Project
+### 3. Adding Projects & Triggering the AI
 
-To tell EvoForge to start managing a GitHub repository, open a terminal on your PC and run:
-```bash
-uv run python -m evoforge.main project add YourUsername/YourRepo
-```
-*Your project will instantly appear in the Android app with its health score and priority!*
+1. Go to the **Projects** tab in the Android App.
+2. Tap the blue **`+`** button in the bottom right corner.
+3. Type the repository you want the AI to manage (e.g., `YourUsername/YourRepo`) and tap **Add**.
+4. The AI is programmed to run once every 24 hours. **To force it to run immediately:** Open a web browser and visit `https://YOUR_RENDER_URL.onrender.com/api/force-run-daily`.
+5. Watch the **Dashboard** tab on your phone to see the AI's telemetry light up as it writes code!
 
 <br>
 
