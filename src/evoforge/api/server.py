@@ -690,9 +690,19 @@ def api_add_project(req: ProjectAddRequest) -> ProjectProfile:
         raise HTTPException(status_code=400, detail="Repository already registered")
         
     repo = req.repository_full_name
-    project_id = f"proj_{uuid.uuid4().hex[:8]}"
-    owner, name = repo.split('/') if '/' in repo else ("unknown", repo)
     
+    # Handle if user pastes full URL
+    if "github.com/" in repo:
+        repo = repo.split("github.com/")[-1].strip("/")
+        
+    project_id = f"proj_{uuid.uuid4().hex[:8]}"
+    
+    parts = repo.split('/')
+    if len(parts) >= 2:
+        owner, name = parts[-2], parts[-1]
+    else:
+        owner, name = "unknown", repo
+
     profile = ProjectProfile(
         project_id=project_id,
         repository_full_name=repo,
