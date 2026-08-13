@@ -120,37 +120,69 @@ CREATE TABLE IF NOT EXISTS skill_versions (
 
 -- Knowledge items with lifecycle
 CREATE TABLE IF NOT EXISTS knowledge_items (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
+    knowledge_id TEXT PRIMARY KEY,
+    topic TEXT NOT NULL,
     domain TEXT NOT NULL,
-    content TEXT,
-    source TEXT,
-    source_type TEXT,
-    source_url TEXT,
-    publication_date TEXT,
-    retrieved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    summary TEXT,
+    source_ids TEXT,
     confidence REAL DEFAULT 0.0,
-    verification_status TEXT DEFAULT 'unverified',
-    lifecycle_state TEXT DEFAULT 'discovered',
-    applicable_agents TEXT,
-    metadata TEXT,
+    verification_status TEXT DEFAULT 'UNVERIFIED',
+    tags TEXT,
+    related_skills TEXT,
+    related_projects TEXT,
+    evidence TEXT,
+    expires_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Research items (inbox/pipeline)
-CREATE TABLE IF NOT EXISTS research_items (
-    id TEXT PRIMARY KEY,
-    agent_name TEXT NOT NULL,
-    topic TEXT NOT NULL,
+-- Research jobs (Phase 5)
+CREATE TABLE IF NOT EXISTS research_jobs (
+    research_id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    project_id TEXT,
+    task_id TEXT,
     domain TEXT NOT NULL,
-    volatility TEXT DEFAULT 'medium',
-    trigger TEXT DEFAULT 'scheduled',
-    status TEXT DEFAULT 'pending',
+    topic TEXT NOT NULL,
+    query TEXT,
+    reason TEXT,
+    priority REAL DEFAULT 0.5,
+    status TEXT DEFAULT 'QUEUED',
+    source_ids TEXT,
+    confidence REAL DEFAULT 0.0,
     findings TEXT,
-    sources TEXT,
-    scheduled_at TIMESTAMP,
+    skill_gap_id TEXT,
+    started_at TIMESTAMP,
     completed_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Skill Gaps (Phase 5)
+CREATE TABLE IF NOT EXISTS skill_gaps (
+    skill_gap_id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    skill_id TEXT NOT NULL,
+    project_id TEXT,
+    severity TEXT DEFAULT 'MEDIUM',
+    confidence REAL DEFAULT 1.0,
+    evidence_ids TEXT,
+    recommended_action TEXT,
+    status TEXT DEFAULT 'OPEN',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Practice Plans (Phase 5)
+CREATE TABLE IF NOT EXISTS practice_plans (
+    practice_id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    skill_id TEXT NOT NULL,
+    objective TEXT,
+    tasks TEXT,
+    difficulty TEXT,
+    budget TEXT,
+    deadline TIMESTAMP,
+    benchmark_id TEXT,
+    status TEXT DEFAULT 'DRAFT',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -158,29 +190,43 @@ CREATE TABLE IF NOT EXISTS research_items (
 CREATE TABLE IF NOT EXISTS lessons (
     id TEXT PRIMARY KEY,
     agent_name TEXT NOT NULL,
-    problem TEXT NOT NULL,
-    evidence TEXT,
-    evidence_count INTEGER DEFAULT 0,
-    learning TEXT NOT NULL,
-    correction TEXT,
-    status TEXT DEFAULT 'unverified',
-    applied_to_version TEXT,
-    regression_result TEXT,
+    problem_pattern TEXT NOT NULL,
+    root_cause TEXT,
+    successful_solution TEXT,
+    related_skill TEXT,
+    evidence_ids TEXT,
+    confidence REAL DEFAULT 1.0,
+    status TEXT DEFAULT 'UNVERIFIED',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Benchmark suites and results
 CREATE TABLE IF NOT EXISTS benchmarks (
-    id TEXT PRIMARY KEY,
-    agent_name TEXT NOT NULL,
-    suite_name TEXT NOT NULL,
-    task_count INTEGER,
+    benchmark_id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    skill_id TEXT NOT NULL,
+    environment TEXT,
     baseline_score REAL,
-    current_score REAL,
-    improvement_pct REAL,
-    last_run TIMESTAMP,
-    results TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    candidate_score REAL,
+    sample_count INTEGER DEFAULT 0,
+    evidence TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Evolution Proposals (Phase 5)
+CREATE TABLE IF NOT EXISTS evolution_proposals (
+    proposal_id TEXT PRIMARY KEY,
+    target TEXT NOT NULL,
+    change_type TEXT NOT NULL,
+    description TEXT,
+    evidence_ids TEXT,
+    expected_improvement TEXT,
+    risk TEXT,
+    benchmark_id TEXT,
+    status TEXT DEFAULT 'PROPOSED',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    approved_at TIMESTAMP,
+    deployed_at TIMESTAMP
 );
 
 -- Failure registry
@@ -404,6 +450,8 @@ class Database:
         try:
             conn = self.get_connection()
             try:
+                # Phase 5 Migration: Preserve existing learning history
+                # Ensure we do not drop 'knowledge_items', 'lessons', 'benchmarks', 'failures'
                 conn.executescript(SCHEMA)
                 # Apply migrations conditionally
                 for col_query in [

@@ -88,6 +88,7 @@ class ProjectScanner:
         
         # Try to find a local workspace to scan
         import os
+
         from evoforge.github_integration.scanner import RepositoryScanner
         
         # Check standard workspace location or current directory if it's the root project

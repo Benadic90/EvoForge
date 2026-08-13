@@ -9,6 +9,7 @@ import NetworkView from './NetworkView';
 import KnowledgeBase from './KnowledgeBase';
 import Deployments from './Deployments';
 import PortfolioView from './PortfolioView';
+import LearningView from './LearningView';
 import Settings from './Settings';
 
 export default function App() {
@@ -136,6 +137,10 @@ export default function App() {
     
     if (activeTab === 'portfolio') {
       return <PortfolioView />;
+    }
+    
+    if (activeTab === 'learning') {
+      return <LearningView />;
     }
     
     if (activeTab === 'settings') {

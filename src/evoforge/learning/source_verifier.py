@@ -1,10 +1,9 @@
 import json
-import uuid
 from enum import Enum
 
 import structlog
-from pydantic import BaseModel
 
+from evoforge.learning.models import KnowledgeItem, KnowledgeVerificationStatus
 from evoforge.memory.database import Database
 from evoforge.memory.obsidian import ObsidianManager
 
@@ -19,30 +18,6 @@ class SourceType(Enum):
     ENGINEERING_BLOG = "ENGINEERING_BLOG"
     COMMUNITY_DISCUSSION = "COMMUNITY_DISCUSSION"
     UNKNOWN = "UNKNOWN"
-
-class VerificationStatus(Enum):
-    KNOWN = "KNOWN"
-    VERIFIED = "VERIFIED"
-    EXPERIMENTAL = "EXPERIMENTAL"
-    UNVERIFIED = "UNVERIFIED"
-    REJECTED = "REJECTED"
-    DEPRECATED = "DEPRECATED"
-
-class KnowledgeItem(BaseModel):
-    title: str
-    domain: str
-    content: str
-    source: str
-    source_type: SourceType
-    source_url: str
-    publication_date: str | None = None
-    applicable_agents: list[str] = []
-    
-class VerificationResult(BaseModel):
-    item_id: str
-    status: VerificationStatus
-    confidence: float
-    reasoning: str
 
 class SourceEvaluator:
     def __init__(self):
@@ -60,6 +35,8 @@ class SourceEvaluator:
 
     def evaluate_source(self, url: str, content: str) -> SourceType:
         """Heuristic evaluation of source type from URL and content."""
+        if not url:
+            return SourceType.UNKNOWN
         url_lower = url.lower()
         if "docs." in url_lower or "/docs" in url_lower:
             return SourceType.OFFICIAL_DOCS
@@ -87,80 +64,104 @@ class KnowledgeVerifier:
 
     def ingest_knowledge(self, item: KnowledgeItem) -> str:
         """Ingests raw knowledge item as UNVERIFIED."""
-        item_id = str(uuid.uuid4())
+        conn = self.db.get_connection()
+        try:
+            cursor = conn.cursor()
+            
+            # Detect contradiction (same topic, domain, but differing summary/evidence could be handled by a more advanced embedding similarity, 
+            # but for MVP we flag it if there are conflicting confidence items or just rely on manual tagging)
+            
+            cursor.execute(
+                """
+                INSERT INTO knowledge_items 
+                (knowledge_id, topic, domain, summary, source_ids, confidence, verification_status, tags, related_skills, related_projects, evidence)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (item.knowledge_id, item.topic, item.domain, item.summary, 
+                 json.dumps(item.source_ids), item.confidence, item.verification_status, 
+                 json.dumps(item.tags), json.dumps(item.related_skills), json.dumps(item.related_projects), item.evidence)
+            )
+            conn.commit()
+            logger.info("knowledge_ingested", knowledge_id=item.knowledge_id, topic=item.topic)
+        finally:
+            conn.close()
+        return item.knowledge_id
+
+    def detect_contradiction(self, topic: str, domain: str) -> bool:
+        """Simple contradiction detection based on differing active VERIFIED knowledge items on the same exact topic."""
         conn = self.db.get_connection()
         try:
             cursor = conn.cursor()
             cursor.execute(
-                """
-                INSERT INTO knowledge_items 
-                (id, title, domain, content, source, source_type, source_url, publication_date, 
-                 verification_status, lifecycle_state, applicable_agents)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'UNVERIFIED', 'discovered', ?)
-                """,
-                (item_id, item.title, item.domain, item.content, item.source, 
-                 item.source_type.value, item.source_url, item.publication_date, 
-                 json.dumps(item.applicable_agents))
+                "SELECT COUNT(knowledge_id) as count FROM knowledge_items WHERE topic = ? AND domain = ? AND verification_status IN ('VERIFIED', 'LIKELY_VALID')",
+                (topic, domain)
             )
-            conn.commit()
-            logger.info("knowledge_ingested", id=item_id, title=item.title)
+            row = cursor.fetchone()
+            if row and row["count"] > 1:
+                return True
+            return False
         finally:
             conn.close()
-        return item_id
 
-    def verify_knowledge_item(self, item_id: str, corroborating_sources: int = 0) -> VerificationResult:
+    def verify_knowledge_item(self, knowledge_id: str, source_urls: list[str]) -> KnowledgeVerificationStatus:
         """Verifies an ingested item based on source reliability."""
         conn = self.db.get_connection()
         try:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM knowledge_items WHERE id = ?", (item_id,))
+            cursor.execute("SELECT * FROM knowledge_items WHERE knowledge_id = ?", (knowledge_id,))
             row = cursor.fetchone()
             if not row:
-                raise ValueError(f"Knowledge item {item_id} not found.")
+                raise ValueError(f"Knowledge item {knowledge_id} not found.")
 
-            source_type = SourceType(row["source_type"])
-            confidence = self.evaluator.calculate_confidence(source_type, corroborating_sources)
+            # Evaluate the best source
+            best_type = SourceType.UNKNOWN
+            for url in source_urls:
+                st = self.evaluator.evaluate_source(url, "")
+                if self.evaluator.type_confidence.get(st, 0) > self.evaluator.type_confidence.get(best_type, 0):
+                    best_type = st
             
-            # Determine status based on confidence thresholds
-            if confidence >= 0.85:
-                status = VerificationStatus.VERIFIED
-                lifecycle = 'verified'
-                reasoning = "High confidence source type with sufficient corroboration."
+            corroborating = max(0, len(source_urls) - 1)
+            confidence = self.evaluator.calculate_confidence(best_type, corroborating)
+            
+            topic = row["topic"]
+            domain = row["domain"]
+            
+            if self.detect_contradiction(topic, domain):
+                status = "CONFLICTED"
+            elif confidence >= 0.85:
+                status = "VERIFIED"
             elif confidence >= 0.60:
-                status = VerificationStatus.EXPERIMENTAL
-                lifecycle = 'experimental'
-                reasoning = "Moderate confidence. Requires sandbox experimentation."
+                status = "LIKELY_VALID"
+            elif confidence >= 0.40:
+                status = "LOW_CONFIDENCE"
             else:
-                status = VerificationStatus.REJECTED
-                lifecycle = 'rejected'
-                reasoning = "Low confidence source type. Rejected for safety."
+                status = "REJECTED"
 
             # Update DB
             cursor.execute(
                 """
                 UPDATE knowledge_items 
-                SET confidence = ?, verification_status = ?, lifecycle_state = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
+                SET confidence = ?, verification_status = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE knowledge_id = ?
                 """,
-                (confidence, status.value, lifecycle, item_id)
+                (confidence, status, knowledge_id)
             )
             conn.commit()
             
             # Write to Obsidian Knowledge Base
             frontmatter = {
-                "id": item_id,
-                "domain": row["domain"],
-                "source": row["source"],
-                "source_type": source_type.value,
+                "knowledge_id": knowledge_id,
+                "domain": domain,
                 "confidence": confidence,
-                "status": status.value
+                "status": status,
+                "best_source_type": best_type.value
             }
             
-            safe_title = row["title"].replace("/", "_").replace("\\", "_")
-            note_path = self.obsidian.folders["knowledge"] / lifecycle / f"{safe_title}.md"
-            self.obsidian._write_note(note_path, row["content"], frontmatter)
+            safe_title = topic.replace("/", "_").replace("\\", "_")
+            note_path = self.obsidian.folders["knowledge"] / status.lower() / f"{safe_title}.md"
+            self.obsidian._write_note(note_path, row["summary"], frontmatter)
             
-            logger.info("knowledge_verified", id=item_id, status=status.value, confidence=confidence)
-            return VerificationResult(item_id=item_id, status=status, confidence=confidence, reasoning=reasoning)
+            logger.info("knowledge_verified", knowledge_id=knowledge_id, status=status, confidence=confidence)
+            return status
         finally:
             conn.close()

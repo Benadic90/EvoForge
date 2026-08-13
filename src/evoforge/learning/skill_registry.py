@@ -4,6 +4,7 @@ import uuid
 import structlog
 from pydantic import BaseModel
 
+from evoforge.learning.models import SkillLevel
 from evoforge.memory.database import Database
 from evoforge.memory.obsidian import ObsidianManager
 
@@ -13,26 +14,38 @@ class Skill(BaseModel):
     name: str
     version: int = 1
     confidence: float = 0.5
-    capability_level: str = "beginner"
+    skill_level: SkillLevel = "NOVICE"
     techniques: list[str] = []
     tools: list[str] = []
     patterns: list[str] = []
     anti_patterns: list[str] = []
     last_verified: str | None = None
-    freshness: str = "unknown"
+    freshness: str = "UNKNOWN"
     sources: list[str] = []
 
 class SkillProfile(BaseModel):
     agent_name: str
     skills: list[Skill] = []
     
-    def render_skills_context(self) -> str:
+    def render_targeted_context(self, task_requirements: list[str] = None) -> str:
+        """Renders only the relevant skills for the current task to avoid context stuffing."""
         if not self.skills:
             return ""
             
-        context = "\n\n### Your Current Skills & Knowledge:\n"
-        for skill in self.skills:
-            context += f"- **{skill.name}** (v{skill.version}, {skill.capability_level})\n"
+        relevant_skills = self.skills
+        if task_requirements:
+            # Filter skills that match the requirements text loosely
+            req_text = " ".join(task_requirements).lower()
+            relevant_skills = [
+                s for s in self.skills 
+                if s.name.lower() in req_text or any(t.lower() in req_text for t in s.techniques)
+            ]
+            if not relevant_skills:
+                relevant_skills = self.skills[:2] # Fallback to top skills
+                
+        context = "\n\n### Targeted Skills & Knowledge for Task:\n"
+        for skill in relevant_skills:
+            context += f"- **{skill.name}** (v{skill.version}, Level: {skill.skill_level}, Confidence: {skill.confidence:.2f})\n"
             if skill.patterns:
                 context += f"  - Known patterns: {', '.join(skill.patterns[:3])}\n"
             if skill.anti_patterns:
@@ -71,7 +84,7 @@ class SkillRegistry:
                 """,
                 (
                     str(uuid.uuid4()), agent_name, skill.name, skill.version, 
-                    skill.confidence, skill.capability_level, skill.last_verified, 
+                    skill.confidence, skill.skill_level, skill.last_verified, 
                     skill.freshness, json.dumps(metadata)
                 )
             )
@@ -83,7 +96,7 @@ class SkillRegistry:
         frontmatter = {
             "version": skill.version,
             "confidence": skill.confidence,
-            "capability_level": skill.capability_level,
+            "skill_level": skill.skill_level,
             "last_verified": skill.last_verified,
             "freshness": skill.freshness
         }
@@ -131,7 +144,7 @@ class SkillRegistry:
                     name=row["skill_name"],
                     version=row["version"],
                     confidence=row["confidence"],
-                    capability_level=row["capability_level"],
+                    skill_level=row["capability_level"],
                     last_verified=row["last_verified"],
                     freshness=row["freshness"],
                     techniques=meta.get("techniques", []),
@@ -148,7 +161,7 @@ class SkillRegistry:
         # Update obsidian profile summary
         self.obsidian.write_agent_profile(
             agent_name, 
-            f"# {agent_name} Profile\n\nActive skills: {len(skills)}\n\n" + "".join([f"- [[{s.name}]] (v{s.version})\n" for s in skills]),
+            f"# {agent_name} Profile\n\nActive skills: {len(skills)}\n\n" + "".join([f"- [[{s.name}]] (v{s.version}, Level: {s.skill_level})\n" for s in skills]),
             {"agent": agent_name, "skills_count": len(skills)}
         )
         

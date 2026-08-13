@@ -1,9 +1,13 @@
 import json
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 import structlog
 
+# Phase 5 Imports
+from evoforge.learning.models import ResearchJob
+from evoforge.learning.research_engine import ResearchScheduler
+from evoforge.learning.skill_registry import SkillRegistry
 from evoforge.memory.database import Database
 from evoforge.portfolio.models import DailyPortfolioPlan
 from evoforge.portfolio.registry import ProjectRegistry
@@ -16,17 +20,22 @@ class DailyPlanner:
         self.registry = registry
         self.max_tasks = max_tasks
         self.max_cost = max_cost
+        
+        # Phase 5 Dependencies
+        # In a real DI framework these would be injected.
+        self.skill_registry = SkillRegistry(db, None) # Obsidian not strictly needed for this check
+        self.research_scheduler = ResearchScheduler(db)
 
     def generate_plan(self) -> DailyPortfolioPlan:
         """
         Assemble the priority rankings into a bounded daily plan.
+        Integrates Phase 5: Checks required capabilities against actual skills, triggering gaps/research if needed.
         """
         # Fetch top project rankings
         project_query = "SELECT * FROM portfolio_rankings WHERE item_type = 'project' ORDER BY rank ASC"
         project_rows = self.db.fetchall(project_query)
         top_projects = [row["item_id"] for row in project_rows][:3]  # Consider top 3 projects for the day
         
-        # Fetch top tasks for those projects
         selected_tasks = []
         execution_order = []
         reasons = []
@@ -39,28 +48,55 @@ class DailyPlanner:
                 break
                 
             task_id = row["item_id"]
-            # To know the project, we'd join with portfolio_tasks, but we'll simplify here
-            # by just grabbing the task directly to check dependencies and project.
             task = self._get_task(task_id)
             if not task:
                 continue
                 
-            # Skip if project isn't a top project (focus strategy)
             if task.project_id not in top_projects:
                 continue
                 
-            # Check dependencies
             if self._has_unmet_dependencies(task.dependencies):
                 reasons.append(f"Skipped {task_id}: unmet dependencies.")
+                continue
+                
+            # Phase 5 Integration: Check required capabilities
+            capabilities_met = True
+            for req_cap in task.required_capabilities:
+                if not self._check_capability_across_agents(req_cap):
+                    logger.warning("portfolio_task_missing_capability", task_id=task_id, capability=req_cap)
+                    reasons.append(f"Skipped {task_id}: Missing capability {req_cap}. Triggered Phase 5 Research.")
+                    
+                    # Trigger Phase 5 Learning Loop
+                    gap_id = str(uuid.uuid4())
+                    self._create_skill_gap(gap_id, req_cap, task.project_id, task_id)
+                    
+                    job = ResearchJob(
+                        research_id=str(uuid.uuid4()),
+                        agent_id="ResearchAgent",
+                        project_id=task.project_id,
+                        task_id=task_id,
+                        domain="portfolio_requirement",
+                        topic=req_cap,
+                        query=f"Research technical requirements, documentation, and best practices for: {req_cap}",
+                        reason=f"Required by PortfolioTask {task_id}",
+                        priority=0.9,
+                        skill_gap_id=gap_id
+                    )
+                    self.research_scheduler.schedule_research(job)
+                    capabilities_met = False
+                    break
+                    
+            if not capabilities_met:
                 continue
                 
             selected_tasks.append(task_id)
             execution_order.append(task_id)
             reasons.append(f"Selected {task_id} (Rank {row['rank']}): {task.title}")
 
+        now_utc = datetime.now(UTC)
         plan = DailyPortfolioPlan(
-            plan_id=f"plan_{datetime.utcnow().strftime('%Y%m%d')}_{uuid.uuid4().hex[:4]}",
-            date=datetime.utcnow().strftime('%Y-%m-%d'),
+            plan_id=f"plan_{now_utc.strftime('%Y%m%d')}_{uuid.uuid4().hex[:4]}",
+            date=now_utc.strftime('%Y-%m-%d'),
             selected_projects=list(set([self._get_task(t).project_id for t in selected_tasks if self._get_task(t)])),
             selected_tasks=selected_tasks,
             execution_order=execution_order,
@@ -68,15 +104,45 @@ class DailyPlanner:
             risk="LOW",
             budget={"max_tasks": self.max_tasks, "max_cost": self.max_cost},
             reasons=reasons,
-            created_at=datetime.utcnow()
+            created_at=now_utc
         )
         
         self._save_plan(plan)
         logger.info("daily_plan_generated", plan_id=plan.plan_id, task_count=len(selected_tasks))
-        
-        # Note: The plan determines WHAT to do.
-        # The Orchestrator / run_daily_loop actually consumes this plan and creates WorkflowDefinitions.
         return plan
+
+    def _check_capability_across_agents(self, capability: str) -> bool:
+        """Checks if ANY agent has the required skill with decent confidence."""
+        conn = self.db.get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT 1 FROM skills WHERE skill_name LIKE ? AND status = 'active' AND confidence > 0.5",
+                (f"%{capability}%",)
+            )
+            return cursor.fetchone() is not None
+        finally:
+            conn.close()
+            
+    def _create_skill_gap(self, gap_id: str, skill: str, project_id: str, task_id: str):
+        conn = self.db.get_connection()
+        try:
+            cursor = conn.cursor()
+            # Simple check if one is already open
+            cursor.execute("SELECT 1 FROM skill_gaps WHERE skill_id = ? AND status = 'OPEN'", (skill,))
+            if cursor.fetchone():
+                return
+                
+            cursor.execute(
+                """
+                INSERT INTO skill_gaps (skill_gap_id, agent_id, skill_id, project_id, severity, confidence, status)
+                VALUES (?, ?, ?, ?, ?, ?, 'OPEN')
+                """,
+                (gap_id, "SYSTEM", skill, project_id, "HIGH", 1.0)
+            )
+            conn.commit()
+        finally:
+            conn.close()
 
     def _get_task(self, task_id: str):
         from evoforge.portfolio.models import PortfolioTask
@@ -109,7 +175,6 @@ class DailyPlanner:
         )
 
     def _has_unmet_dependencies(self, dependencies: list[str]) -> bool:
-        """Cycle detection and dependency blocking."""
         if not dependencies:
             return False
             

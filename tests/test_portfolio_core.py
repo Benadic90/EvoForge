@@ -1,5 +1,6 @@
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime, timezone
 
 from evoforge.memory.database import Database
 from evoforge.portfolio.daily_planner import DailyPlanner
@@ -79,7 +80,7 @@ def test_daily_plan_budget_and_dependencies(db, registry):
     
     engine = PortfolioPriorityEngine(db, registry)
     
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     t1 = PortfolioTask(
         task_id="t1", project_id="proj_x", title="Task 1", description="", source="test", source_id="1",
         priority=0.9, status="NOT_STARTED", created_at=now, updated_at=now

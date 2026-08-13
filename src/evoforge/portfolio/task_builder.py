@@ -2,6 +2,7 @@ from evoforge.agents.capabilities import AgentCapability
 from evoforge.model_router.requirements import TaskClassification, TaskRequirements
 from evoforge.portfolio.models import PortfolioTask
 
+
 class PortfolioTaskRequirementsBuilder:
     """Builds Phase 3 TaskRequirements from a Phase 4 PortfolioTask."""
     

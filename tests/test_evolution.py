@@ -13,8 +13,9 @@ from evoforge.model_router.router import ModelRouter
 def test_evolution_agent():
     router = MagicMock(spec=ModelRouter)
     tools = ToolRegistry()
+    db = MagicMock(spec=Database)
     
-    agent = EvolutionAgent(router, tools)
+    agent = EvolutionAgent(router, tools, db=db)
     assert agent.name == "EvolutionAgent"
 
 def test_experiment_framework():

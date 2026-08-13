@@ -728,6 +728,84 @@ def api_get_all_tasks(limit: int = Query(50, ge=1, le=100), offset: int = Query(
         ))
     return tasks
 
+
+# --- Phase 5 Learning & Evolution Endpoints ---
+
+from evoforge.learning.models import (
+    BenchmarkResult,
+    EvolutionProposal,
+    ResearchJob,
+    Skill,
+    SkillGap,
+)
+
+
+@app.get("/api/learning/research", response_model=list[ResearchJob])
+def api_list_research_jobs(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0)) -> list[ResearchJob]:
+    query = "SELECT * FROM research_jobs ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    rows = db.fetchall(query, (limit, offset))
+    return [ResearchJob(**dict(row)) for row in rows]
+
+@app.get("/api/learning/skills", response_model=list[Skill])
+def api_list_skills(agent_id: str = Query(None), limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0)) -> list[Skill]:
+    if agent_id:
+        query = "SELECT * FROM skills WHERE agent_name = ? ORDER BY skill_name ASC LIMIT ? OFFSET ?"
+        params = (agent_id, limit, offset)
+    else:
+        query = "SELECT * FROM skills ORDER BY skill_name ASC LIMIT ? OFFSET ?"
+        params = (limit, offset)
+        
+    rows = db.fetchall(query, params)
+    skills = []
+    for row in rows:
+        meta = json.loads(row["metadata"]) if row["metadata"] else {}
+        skills.append(Skill(
+            name=row["skill_name"],
+            version=row["version"],
+            confidence=row["confidence"],
+            skill_level=row["capability_level"],
+            last_verified=row["last_verified"],
+            freshness=row["freshness"],
+            techniques=meta.get("techniques", []),
+            tools=meta.get("tools", []),
+            patterns=meta.get("patterns", []),
+            anti_patterns=meta.get("anti_patterns", []),
+            sources=meta.get("sources", [])
+        ))
+    return skills
+
+@app.get("/api/learning/gaps", response_model=list[SkillGap])
+def api_list_skill_gaps(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0)) -> list[SkillGap]:
+    query = "SELECT * FROM skill_gaps ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    rows = db.fetchall(query, (limit, offset))
+    return [SkillGap(skill_gap_id=row["skill_gap_id"], agent_id=row["agent_id"], skill_id=row["skill_id"], project_id=row["project_id"], severity=row["severity"], confidence=row["confidence"], status=row["status"], evidence_ids=json.loads(row["evidence_ids"]) if row["evidence_ids"] else [], created_at=row["created_at"], updated_at=row["updated_at"]) for row in rows]
+
+@app.get("/api/learning/benchmarks", response_model=list[BenchmarkResult])
+def api_list_benchmarks(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0)) -> list[BenchmarkResult]:
+    query = "SELECT * FROM benchmarks ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+    rows = db.fetchall(query, (limit, offset))
+    return [BenchmarkResult(**dict(row)) for row in rows]
+
+@app.get("/api/evolution/proposals", response_model=list[EvolutionProposal])
+def api_list_evolution_proposals(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0)) -> list[EvolutionProposal]:
+    query = "SELECT * FROM evolution_proposals ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    rows = db.fetchall(query, (limit, offset))
+    proposals = []
+    for row in rows:
+        proposals.append(EvolutionProposal(
+            proposal_id=row["proposal_id"],
+            target=row["target"],
+            change_type=row["change_type"],
+            description=row["description"],
+            evidence_ids=json.loads(row["evidence_ids"]) if row["evidence_ids"] else [],
+            expected_improvement=row["expected_improvement"],
+            risk=row["risk"],
+            status=row["status"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"]
+        ))
+    return proposals
+
 def start_server():
     """Starts the FastAPI server."""
     uvicorn.run("evoforge.api.server:app", host="0.0.0.0", port=8000, reload=True)
@@ -735,3 +813,4 @@ def start_server():
 
 if __name__ == "__main__":
     start_server()
+
