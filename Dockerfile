@@ -11,11 +11,14 @@ WORKDIR /app
 # Copy dependency files
 COPY pyproject.toml uv.lock README.md ./
 
-# Install dependencies using uv
-RUN uv sync --frozen
+# Install dependencies using uv (without trying to install the missing source code yet)
+RUN uv sync --frozen --no-install-project
 
 # Copy application source code
 COPY . .
+
+# Finalize installation (installs the actual evoforge package)
+RUN uv sync --frozen
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
