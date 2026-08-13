@@ -519,6 +519,163 @@ def get_antigravity_sessions() -> list[Any]:
     # Since there's no runtime yet, there are no real sessions.
     return []
 
+# --- Portfolio Intelligence Endpoints ---
+
+from evoforge.portfolio.models import (
+    ProjectProfile, ProjectHealthReport, ProjectRoadmap, PortfolioTask,
+    PortfolioRanking, DailyPortfolioPlan, PortfolioHealth
+)
+
+@app.get("/api/projects", response_model=list[ProjectProfile])
+def api_list_projects() -> list[ProjectProfile]:
+    from evoforge.portfolio.registry import ProjectRegistry
+    registry = ProjectRegistry(db)
+    return registry.list()
+
+@app.get("/api/projects/{project_id}", response_model=ProjectProfile)
+def api_get_project(project_id: str) -> ProjectProfile:
+    from evoforge.portfolio.registry import ProjectRegistry
+    registry = ProjectRegistry(db)
+    p = registry.get(project_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return p
+
+@app.get("/api/projects/{project_id}/health", response_model=ProjectHealthReport)
+def api_get_project_health(project_id: str) -> ProjectHealthReport:
+    from evoforge.portfolio.registry import ProjectRegistry
+    from evoforge.portfolio.scanner import ProjectScanner
+    from evoforge.github_integration.client import GitHubClient
+    
+    registry = ProjectRegistry(db)
+    if not registry.get(project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+        
+    gh_client = GitHubClient()
+    scanner = ProjectScanner(db, gh_client, registry)
+    report = scanner.scan_project(project_id)
+    if not report:
+        raise HTTPException(status_code=500, detail="Failed to scan project")
+    return report
+
+@app.get("/api/projects/{project_id}/roadmap", response_model=ProjectRoadmap)
+def api_get_project_roadmap(project_id: str) -> ProjectRoadmap:
+    from evoforge.portfolio.registry import ProjectRegistry
+    from evoforge.portfolio.roadmap import RoadmapSynchronizer
+    from evoforge.memory.obsidian import ObsidianManager
+    
+    registry = ProjectRegistry(db)
+    if not registry.get(project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+        
+    obsidian = ObsidianManager(config.memory.vault_path)
+    sync = RoadmapSynchronizer(db, obsidian, registry)
+    roadmap = sync.sync_roadmap(project_id)
+    if not roadmap:
+        raise HTTPException(status_code=500, detail="Failed to sync roadmap")
+    return roadmap
+
+@app.get("/api/projects/{project_id}/tasks", response_model=list[PortfolioTask])
+def api_get_project_tasks(project_id: str) -> list[PortfolioTask]:
+    query = "SELECT * FROM portfolio_tasks WHERE project_id = ?"
+    rows = db.fetchall(query, (project_id,))
+    
+    tasks = []
+    for row in rows:
+        tasks.append(PortfolioTask(
+            task_id=row["task_id"],
+            project_id=row["project_id"],
+            title=row["title"],
+            description=row["description"],
+            source=row["source"],
+            source_id=row["source_id"],
+            priority=row["priority"],
+            risk=row["risk"],
+            estimated_effort=row["estimated_effort"],
+            dependencies=json.loads(row["dependencies"]) if row["dependencies"] else [],
+            required_capabilities=json.loads(row["required_capabilities"]) if row["required_capabilities"] else [],
+            status=row["status"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+            metadata=json.loads(row["metadata"]) if row["metadata"] else {}
+        ))
+    return tasks
+
+@app.get("/api/portfolio/health", response_model=PortfolioHealth)
+def api_get_portfolio_health() -> PortfolioHealth:
+    from evoforge.portfolio.registry import ProjectRegistry
+    registry = ProjectRegistry(db)
+    projects = registry.list()
+    total = len(projects)
+    healthy = sum(1 for p in projects if p.health == "HEALTHY")
+    warning = sum(1 for p in projects if p.health == "WARNING")
+    critical = sum(1 for p in projects if p.health == "CRITICAL")
+    unknown = sum(1 for p in projects if p.health == "UNKNOWN")
+    
+    overall = "UNKNOWN"
+    if total > 0:
+        if critical > 0: overall = "CRITICAL"
+        elif warning > 0: overall = "WARNING"
+        else: overall = "HEALTHY"
+        
+    return PortfolioHealth(
+        total_projects=total,
+        healthy_projects=healthy,
+        warning_projects=warning,
+        critical_projects=critical,
+        unknown_projects=unknown,
+        overall_health=overall,
+        critical_findings=[]
+    )
+
+@app.get("/api/portfolio/ranking", response_model=list[PortfolioRanking])
+def api_get_portfolio_ranking() -> list[PortfolioRanking]:
+    from evoforge.portfolio.registry import ProjectRegistry
+    from evoforge.portfolio.priority_engine import PortfolioPriorityEngine
+    registry = ProjectRegistry(db)
+    engine = PortfolioPriorityEngine(db, registry)
+    return engine.rank_projects()
+
+@app.get("/api/portfolio/daily-plan", response_model=DailyPortfolioPlan)
+def api_get_daily_plan() -> DailyPortfolioPlan:
+    from evoforge.portfolio.registry import ProjectRegistry
+    from evoforge.portfolio.daily_planner import DailyPlanner
+    from evoforge.portfolio.priority_engine import PortfolioPriorityEngine
+    registry = ProjectRegistry(db)
+    
+    # rank first
+    engine = PortfolioPriorityEngine(db, registry)
+    engine.rank_projects()
+    engine.rank_tasks()
+    
+    planner = DailyPlanner(db, registry)
+    return planner.generate_plan()
+
+@app.get("/api/portfolio/tasks", response_model=list[PortfolioTask])
+def api_get_all_tasks() -> list[PortfolioTask]:
+    query = "SELECT * FROM portfolio_tasks"
+    rows = db.fetchall(query)
+    
+    tasks = []
+    for row in rows:
+        tasks.append(PortfolioTask(
+            task_id=row["task_id"],
+            project_id=row["project_id"],
+            title=row["title"],
+            description=row["description"],
+            source=row["source"],
+            source_id=row["source_id"],
+            priority=row["priority"],
+            risk=row["risk"],
+            estimated_effort=row["estimated_effort"],
+            dependencies=json.loads(row["dependencies"]) if row["dependencies"] else [],
+            required_capabilities=json.loads(row["required_capabilities"]) if row["required_capabilities"] else [],
+            status=row["status"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+            metadata=json.loads(row["metadata"]) if row["metadata"] else {}
+        ))
+    return tasks
 
 def start_server():
     """Starts the FastAPI server."""

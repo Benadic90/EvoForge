@@ -248,7 +248,114 @@ CREATE TABLE IF NOT EXISTS routing_decisions (
 
 -- Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_telemetry_task ON execution_telemetry(task_id);
-CREATE INDEX IF NOT EXISTS idx_telemetry_workflow ON execution_telemetry(workflow_id);
+CREATE INDEX IF NOT EXISTS idx_telemetry_executor ON execution_telemetry(executor_id);
+CREATE INDEX IF NOT EXISTS idx_telemetry_success ON execution_telemetry(success);
+CREATE INDEX IF NOT EXISTS idx_routing_task ON routing_decisions(task_id);
+
+-- Phase 4: Portfolio Intelligence Tables
+CREATE TABLE IF NOT EXISTS projects (
+    project_id TEXT PRIMARY KEY,
+    repository_full_name TEXT UNIQUE NOT NULL,
+    repository_url TEXT NOT NULL,
+    owner TEXT NOT NULL,
+    name TEXT NOT NULL,
+    default_branch TEXT NOT NULL,
+    description TEXT,
+    vision TEXT,
+    status TEXT DEFAULT 'ACTIVE',
+    importance REAL DEFAULT 0.5,
+    priority_score REAL DEFAULT 0.0,
+    health TEXT DEFAULT 'UNKNOWN',
+    ci_health REAL,
+    security_health REAL,
+    test_health REAL,
+    documentation_health REAL,
+    maintenance_health REAL,
+    technical_debt REAL,
+    recent_activity TIMESTAMP,
+    last_scanned_at TIMESTAMP,
+    last_worked_at TIMESTAMP,
+    roadmap_version TEXT,
+    metadata TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS project_roadmaps (
+    roadmap_id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(project_id),
+    version TEXT NOT NULL,
+    vision TEXT,
+    milestones TEXT,
+    objectives TEXT,
+    dependencies TEXT,
+    status TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS portfolio_tasks (
+    task_id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(project_id),
+    title TEXT NOT NULL,
+    description TEXT,
+    source TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    priority REAL DEFAULT 0.0,
+    risk TEXT DEFAULT 'LOW',
+    estimated_effort TEXT DEFAULT 'UNKNOWN',
+    dependencies TEXT,
+    required_capabilities TEXT,
+    status TEXT DEFAULT 'NOT_STARTED',
+    metadata TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS portfolio_rankings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id TEXT NOT NULL,
+    item_type TEXT NOT NULL,
+    rank INTEGER NOT NULL,
+    score REAL NOT NULL,
+    reasons TEXT,
+    evidence TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS daily_plans (
+    plan_id TEXT PRIMARY KEY,
+    date TEXT NOT NULL UNIQUE,
+    selected_projects TEXT,
+    selected_tasks TEXT,
+    execution_order TEXT,
+    estimated_work TEXT,
+    risk TEXT,
+    budget TEXT,
+    reasons TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS portfolio_evidence (
+    evidence_id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(project_id),
+    task_id TEXT REFERENCES portfolio_tasks(task_id),
+    source TEXT NOT NULL,
+    source_type TEXT NOT NULL,
+    source_id TEXT,
+    observation TEXT NOT NULL,
+    confidence REAL DEFAULT 1.0,
+    metadata TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Phase 4 Indexes
+CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status);
+CREATE INDEX IF NOT EXISTS idx_projects_priority ON projects(priority_score);
+CREATE INDEX IF NOT EXISTS idx_portfolio_tasks_project ON portfolio_tasks(project_id);
+CREATE INDEX IF NOT EXISTS idx_portfolio_tasks_status ON portfolio_tasks(status);
+CREATE INDEX IF NOT EXISTS idx_portfolio_evidence_project ON portfolio_evidence(project_id);
+
 CREATE INDEX IF NOT EXISTS idx_telemetry_executor ON execution_telemetry(executor_id);
 CREATE INDEX IF NOT EXISTS idx_telemetry_task_type ON execution_telemetry(task_type);
 CREATE INDEX IF NOT EXISTS idx_telemetry_created ON execution_telemetry(created_at);

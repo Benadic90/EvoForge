@@ -473,7 +473,226 @@ def executor_stats(task_type: str = typer.Option(None, "--task-type", "-t", help
     console.print(table)
 
 
+@app.command("projects")
+def list_projects():
+    """List all explicitly managed portfolio projects."""
+    from evoforge.memory.database import Database
+    from evoforge.utils.config import load_config
+    from evoforge.portfolio.registry import ProjectRegistry
+    
+    cfg = load_config()
+    db = Database(cfg.database.sqlite_path)
+    registry = ProjectRegistry(db)
+    
+    table = Table(title="Portfolio Projects")
+    table.add_column("Project ID", style="cyan")
+    table.add_column("Repository", style="green")
+    table.add_column("Status")
+    table.add_column("Priority Score")
+    table.add_column("Health")
+    
+    for p in registry.list():
+        table.add_row(
+            p.project_id,
+            p.repository_full_name,
+            p.status,
+            f"{p.priority_score:.2f}",
+            p.health
+        )
+    console.print(table)
+
+
+@app.command("project-add")
+def project_add(repo: str):
+    """Register a GitHub repository as a managed project."""
+    from evoforge.memory.database import Database
+    from evoforge.utils.config import load_config
+    from evoforge.portfolio.registry import ProjectRegistry
+    from evoforge.portfolio.models import ProjectProfile
+    import uuid
+    
+    cfg = load_config()
+    db = Database(cfg.database.sqlite_path)
+    registry = ProjectRegistry(db)
+    
+    # Check if already exists
+    if registry.get_by_repo(repo):
+        console.print(f"[yellow]Repository {repo} is already registered.[/yellow]")
+        return
+        
+    project_id = f"proj_{uuid.uuid4().hex[:8]}"
+    owner, name = repo.split('/') if '/' in repo else ("unknown", repo)
+    
+    profile = ProjectProfile(
+        project_id=project_id,
+        repository_full_name=repo,
+        repository_url=f"https://github.com/{repo}",
+        owner=owner,
+        name=name,
+        default_branch="main",  # Will be updated by scanner
+        status="ACTIVE"
+    )
+    registry.register(profile)
+    console.print(f"[green]Successfully registered {repo} with ID {project_id}[/green]")
+
+
+@app.command("project-remove")
+def project_remove(repo: str):
+    """Remove a repository from the managed portfolio."""
+    from evoforge.memory.database import Database
+    from evoforge.utils.config import load_config
+    from evoforge.portfolio.registry import ProjectRegistry
+    
+    cfg = load_config()
+    db = Database(cfg.database.sqlite_path)
+    registry = ProjectRegistry(db)
+    
+    p = registry.get_by_repo(repo)
+    if not p:
+        console.print(f"[yellow]Repository {repo} is not registered.[/yellow]")
+        return
+        
+    registry.remove(p.project_id)
+    console.print(f"[green]Successfully removed {repo}[/green]")
+
+
+@app.command("project-show")
+def project_show(project_id: str):
+    """Show detailed portfolio metrics for a project."""
+    from evoforge.memory.database import Database
+    from evoforge.utils.config import load_config
+    from evoforge.portfolio.registry import ProjectRegistry
+    
+    cfg = load_config()
+    db = Database(cfg.database.sqlite_path)
+    registry = ProjectRegistry(db)
+    
+    p = registry.get(project_id) or registry.get_by_repo(project_id)
+    if not p:
+        console.print(f"[red]Project {project_id} not found.[/red]")
+        return
+        
+    console.print(f"[bold cyan]Project:[/bold cyan] {p.name}")
+    console.print(f"Repository: {p.repository_full_name}")
+    console.print(f"Status: {p.status}")
+    console.print(f"Health: {p.health}")
+    console.print(f"Priority Score: {p.priority_score:.2f}")
+    if p.description:
+        console.print(f"Description: {p.description}")
+
+
+@app.command("portfolio-scan")
+def portfolio_scan():
+    """Scan all managed projects to update health and roadmap state."""
+    from evoforge.memory.database import Database
+    from evoforge.utils.config import load_config
+    from evoforge.portfolio.registry import ProjectRegistry
+    from evoforge.portfolio.scanner import ProjectScanner
+    from evoforge.github_integration.client import GitHubClient
+    
+    cfg = load_config()
+    db = Database(cfg.database.sqlite_path)
+    registry = ProjectRegistry(db)
+    gh_client = GitHubClient()
+    scanner = ProjectScanner(db, gh_client, registry)
+    
+    console.print("[cyan]Starting portfolio scan...[/cyan]")
+    for p in registry.list():
+        if p.status == "ACTIVE":
+            console.print(f"Scanning {p.repository_full_name}...")
+            report = scanner.scan_project(p.project_id)
+            if report:
+                console.print(f"  Health: {report.overall_health}")
+    console.print("[green]Portfolio scan completed.[/green]")
+
+
+@app.command("portfolio-health")
+def portfolio_health():
+    """Display an aggregated view of portfolio health."""
+    from evoforge.memory.database import Database
+    from evoforge.utils.config import load_config
+    from evoforge.portfolio.registry import ProjectRegistry
+    
+    cfg = load_config()
+    db = Database(cfg.database.sqlite_path)
+    registry = ProjectRegistry(db)
+    
+    projects = registry.list()
+    total = len(projects)
+    healthy = sum(1 for p in projects if p.health == "HEALTHY")
+    warning = sum(1 for p in projects if p.health == "WARNING")
+    critical = sum(1 for p in projects if p.health == "CRITICAL")
+    unknown = sum(1 for p in projects if p.health == "UNKNOWN")
+    
+    console.print(f"[bold cyan]Portfolio Health Overview[/bold cyan]")
+    console.print(f"Total Projects: {total}")
+    console.print(f"[green]Healthy:[/green] {healthy}")
+    console.print(f"[yellow]Warning:[/yellow] {warning}")
+    console.print(f"[red]Critical:[/red] {critical}")
+    console.print(f"Unknown: {unknown}")
+
+
+@app.command("portfolio-ranking")
+def portfolio_ranking():
+    """Rank projects and tasks based on portfolio priority engine."""
+    from evoforge.memory.database import Database
+    from evoforge.utils.config import load_config
+    from evoforge.portfolio.registry import ProjectRegistry
+    from evoforge.portfolio.priority_engine import PortfolioPriorityEngine
+    
+    cfg = load_config()
+    db = Database(cfg.database.sqlite_path)
+    registry = ProjectRegistry(db)
+    engine = PortfolioPriorityEngine(db, registry)
+    
+    console.print("[cyan]Generating Project Rankings...[/cyan]")
+    rankings = engine.rank_projects()
+    
+    table = Table(title="Project Rankings")
+    table.add_column("Rank", style="cyan")
+    table.add_column("Project ID", style="green")
+    table.add_column("Score")
+    table.add_column("Top Reason")
+    
+    for r in rankings:
+        reason = r.reasons[0] if r.reasons else "None"
+        table.add_row(str(r.rank), r.item_id, f"{r.score:.2f}", reason)
+        
+    console.print(table)
+
+
+@app.command("daily-plan")
+def daily_plan():
+    """Generate the daily portfolio plan for execution."""
+    from evoforge.memory.database import Database
+    from evoforge.utils.config import load_config
+    from evoforge.portfolio.registry import ProjectRegistry
+    from evoforge.portfolio.daily_planner import DailyPlanner
+    from evoforge.portfolio.priority_engine import PortfolioPriorityEngine
+    
+    cfg = load_config()
+    db = Database(cfg.database.sqlite_path)
+    registry = ProjectRegistry(db)
+    
+    # Refresh rankings
+    engine = PortfolioPriorityEngine(db, registry)
+    engine.rank_projects()
+    engine.rank_tasks()
+    
+    # Generate plan
+    planner = DailyPlanner(db, registry)
+    plan = planner.generate_plan()
+    
+    console.print("[bold cyan]Daily Portfolio Plan[/bold cyan]")
+    console.print(f"Date: {plan.date}")
+    console.print(f"Projects to focus on: {len(plan.selected_projects)}")
+    console.print(f"Tasks scheduled: {len(plan.selected_tasks)}")
+    console.print("\n[bold]Execution Order:[/bold]")
+    for idx, task_id in enumerate(plan.execution_order):
+        console.print(f"{idx+1}. {task_id}")
+    console.print(f"\n[bold]Budget:[/bold] max {plan.budget.get('max_tasks')} tasks")
+
+
 if __name__ == "__main__":
     app()
-
 

@@ -1,6 +1,19 @@
 from typing import Any
+from datetime import datetime
 
 from pydantic import BaseModel, Field
+
+# Portfolio Models
+from evoforge.portfolio.models import (
+    ProjectProfile,
+    ProjectHealthReport,
+    ProjectRoadmap,
+    PortfolioTask,
+    PortfolioRanking,
+    DailyPortfolioPlan,
+    PortfolioHealth,
+    PortfolioEvidence
+)
 
 
 class SystemStatusResponse(BaseModel):

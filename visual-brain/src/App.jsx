@@ -8,6 +8,7 @@ import AgentHub from './AgentHub';
 import NetworkView from './NetworkView';
 import KnowledgeBase from './KnowledgeBase';
 import Deployments from './Deployments';
+import PortfolioView from './PortfolioView';
 import Settings from './Settings';
 
 export default function App() {
@@ -131,6 +132,10 @@ export default function App() {
     
     if (activeTab === 'deployments') {
       return <Deployments />;
+    }
+    
+    if (activeTab === 'portfolio') {
+      return <PortfolioView />;
     }
     
     if (activeTab === 'settings') {
