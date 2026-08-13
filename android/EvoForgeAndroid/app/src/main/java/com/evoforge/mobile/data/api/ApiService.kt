@@ -28,6 +28,9 @@ interface ApiService {
     @GET("api/projects")
     suspend fun getProjects(): Response<List<ProjectResponse>>
 
+    @POST("api/projects")
+    suspend fun addProject(@Body request: ProjectAddRequest): Response<ProjectResponse>
+
     @GET("api/projects/{projectId}")
     suspend fun getProject(@Path("projectId") projectId: String): Response<ProjectResponse>
 

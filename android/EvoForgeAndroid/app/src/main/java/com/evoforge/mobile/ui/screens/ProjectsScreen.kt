@@ -27,43 +27,92 @@ import com.evoforge.mobile.data.model.ProjectResponse
 fun ProjectsScreen(systemViewModel: SystemViewModel) {
     val projects by systemViewModel.projects.collectAsState()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        // Header
-        Column(modifier = Modifier.padding(20.dp)) {
-            Text(
-                "Projects",
-                style = MaterialTheme.typography.headlineLarge
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "${projects.size} managed projects",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+    var showAddDialog by remember { mutableStateOf(false) }
+    var newRepoText by remember { mutableStateOf("") }
 
-        if (projects.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    Scaffold(
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showAddDialog = true },
+                containerColor = MaterialTheme.colorScheme.primary
+            ) {
+                Icon(androidx.compose.material.icons.Icons.Rounded.Add, contentDescription = "Add Project")
+            }
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            // Header
+            Column(modifier = Modifier.padding(20.dp)) {
                 Text(
-                    "No projects discovered.",
-                    style = MaterialTheme.typography.bodyLarge,
+                    "Projects",
+                    style = MaterialTheme.typography.headlineLarge
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "${projects.size} managed projects",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-        } else {
-            LazyColumn(
-                contentPadding = PaddingValues(horizontal = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(projects) { project ->
-                    ProjectRow(project)
+
+            if (projects.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        "No projects discovered.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(projects) { project ->
+                        ProjectRow(project)
+                    }
                 }
             }
         }
+    }
+
+    if (showAddDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddDialog = false },
+            title = { Text("Add Project") },
+            text = {
+                OutlinedTextField(
+                    value = newRepoText,
+                    onValueChange = { newRepoText = it },
+                    label = { Text("Repository (owner/repo)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (newRepoText.isNotBlank()) {
+                            systemViewModel.addProject(newRepoText.trim())
+                        }
+                        showAddDialog = false
+                        newRepoText = ""
+                    }
+                ) {
+                    Text("Add")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 

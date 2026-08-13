@@ -50,6 +50,11 @@ data class ProjectResponse(
 )
 
 @Serializable
+data class ProjectAddRequest(
+    val repository_full_name: String
+)
+
+@Serializable
 data class GitHubTokenUpdate(
     val token: String
 )

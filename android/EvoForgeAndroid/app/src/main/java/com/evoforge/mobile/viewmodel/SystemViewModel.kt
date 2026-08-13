@@ -170,15 +170,28 @@ class SystemViewModel(private val authManager: AuthManager) : ViewModel() {
         }
     }
 
-    private suspend fun fetchProjects() {
-        apiService?.let { api ->
+    private fun fetchProjects() {
+        viewModelScope.launch {
             try {
-                val response = api.getProjects()
-                if (response.isSuccessful) {
+                val response = apiService?.getProjects()
+                if (response?.isSuccessful == true) {
                     _projects.value = response.body() ?: emptyList()
                 }
             } catch (e: Exception) {
-                // Ignore
+                e.printStackTrace()
+            }
+        }
+    }
+
+    fun addProject(repo: String) {
+        viewModelScope.launch {
+            try {
+                val response = apiService?.addProject(com.evoforge.mobile.data.model.ProjectAddRequest(repo))
+                if (response?.isSuccessful == true) {
+                    fetchProjects() // Refresh the list
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
     }

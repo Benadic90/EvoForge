@@ -674,6 +674,40 @@ def api_list_projects(limit: int = Query(50, ge=1, le=100), offset: int = Query(
     projects = registry.list()
     return projects[offset:offset+limit]
 
+from pydantic import BaseModel
+
+class ProjectAddRequest(BaseModel):
+    repository_full_name: str
+
+@app.post("/api/projects", response_model=ProjectProfile)
+def api_add_project(req: ProjectAddRequest) -> ProjectProfile:
+    import uuid
+
+    from evoforge.portfolio.registry import ProjectRegistry
+    registry = ProjectRegistry(db)
+    
+    if registry.get_by_repo(req.repository_full_name):
+        raise HTTPException(status_code=400, detail="Repository already registered")
+        
+    repo = req.repository_full_name
+    project_id = f"proj_{uuid.uuid4().hex[:8]}"
+    owner, name = repo.split('/') if '/' in repo else ("unknown", repo)
+    
+    profile = ProjectProfile(
+        project_id=project_id,
+        repository_full_name=repo,
+        repository_url=f"https://github.com/{repo}",
+        owner=owner,
+        name=name,
+        description=f"Auto-managed repository {repo}",
+        status="MANAGED",
+        priority_score=50.0,
+        health="UNKNOWN"
+    )
+    
+    registry.register(profile)
+    return profile
+
 @app.get("/api/projects/{project_id}", response_model=ProjectProfile)
 def api_get_project(project_id: str) -> ProjectProfile:
     from evoforge.portfolio.registry import ProjectRegistry
