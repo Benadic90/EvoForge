@@ -91,7 +91,10 @@ def get_status() -> SystemStatusResponse:
     healthy_count = sum(1 for e in all_executors if executor_registry.is_healthy(e))
     unhealthy_count = len(all_executors) - healthy_count
 
+    from datetime import datetime, UTC
     return SystemStatusResponse(
+        status="success",
+        timestamp=datetime.now(UTC).isoformat(),
         system_state=summary["system_state"],
         active_workflows=summary["active_workflows"],
         failed_workflows=summary["failed_workflows"],

@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field
 
 
 class SystemStatusResponse(BaseModel):
+    status: str = "success"
+    timestamp: str = ""
     system_state: str
     active_workflows: int
     failed_workflows: int
