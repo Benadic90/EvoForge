@@ -414,12 +414,14 @@ def route_test(task: str):
         AgentCapability.REFACTORING,
         AgentCapability.MULTI_FILE_EDITING,
         AgentCapability.REPO_NAVIGATION,
+        AgentCapability.TERMINAL,
     ])
     registry.register("nvidia", NvidiaExecutor(), [
         AgentCapability.CODING,
         AgentCapability.REASONING,
         AgentCapability.REFACTORING,
         AgentCapability.MULTI_FILE_EDITING,
+        AgentCapability.TERMINAL,
     ])
     registry.register("antigravity", AntigravityExecutor(), [
         AgentCapability.CODING,
