@@ -28,6 +28,10 @@ import com.evoforge.mobile.data.model.ProjectResponse
 fun ProjectsScreen(systemViewModel: SystemViewModel, onNavigateToProject: (String) -> Unit) {
     val projects by systemViewModel.projects.collectAsState()
 
+    LaunchedEffect(Unit) {
+        systemViewModel.refreshProjects()
+    }
+
     var showAddDialog by remember { mutableStateOf(false) }
     var newRepoText by remember { mutableStateOf("") }
 

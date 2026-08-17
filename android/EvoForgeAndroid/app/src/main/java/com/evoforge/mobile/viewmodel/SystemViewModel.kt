@@ -17,7 +17,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -53,8 +53,13 @@ class SystemViewModel(private val authManager: AuthManager) : ViewModel() {
     init {
         // Initially try to connect if we already have a URL
         viewModelScope.launch {
-            if (!authManager.baseUrlFlow.firstOrNull().isNullOrBlank()) {
-                connect(false)
+            try {
+                val baseUrl = authManager.baseUrlFlow.first()
+                if (!baseUrl.isNullOrBlank()) {
+                    connect(false)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
         startPolling()
@@ -64,8 +69,8 @@ class SystemViewModel(private val authManager: AuthManager) : ViewModel() {
         viewModelScope.launch {
             _connectionState.value = ConnectionState.Connecting
             
-            val baseUrl = authManager.baseUrlFlow.firstOrNull()
-            val token = authManager.tokenFlow.firstOrNull()
+            val baseUrl = try { authManager.baseUrlFlow.first() } catch (e: Exception) { null }
+            val token = try { authManager.tokenFlow.first() } catch (e: Exception) { null }
             
             apiService = ApiClient.getService(baseUrl, token, forceRebuild)
 
@@ -81,7 +86,7 @@ class SystemViewModel(private val authManager: AuthManager) : ViewModel() {
                     _connectionState.value = ConnectionState.Online
                     fetchComputePolicy()
                     fetchGitHubStatus()
-                    fetchProjects()
+                    refreshProjects()
                 } else {
                     _connectionState.value = ConnectionState.Offline("HTTP ${response.code()}: ${response.message()}")
                 }
@@ -170,7 +175,7 @@ class SystemViewModel(private val authManager: AuthManager) : ViewModel() {
         }
     }
 
-    private fun fetchProjects() {
+    fun refreshProjects() {
         viewModelScope.launch {
             try {
                 val response = apiService?.getProjects()
