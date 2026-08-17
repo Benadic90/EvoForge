@@ -7,7 +7,7 @@ import kotlinx.serialization.json.JsonElement
 data class SystemStatusResponse(
     val status: String = "success",
     val timestamp: String = "",
-    val system_state: String,
+    val system_state: String = "Optimal",
     val active_workflows: Int = 0,
     val failed_workflows: Int = 0,
     val paused_workflows: Int = 0,
@@ -55,24 +55,24 @@ data class SchedulerSummary(
 
 @Serializable
 data class ComputePolicy(
-    val mode: String,
-    val allow_local: Boolean,
-    val allow_cloud: Boolean,
-    val prefer_local: Boolean,
-    val ollama_enabled: Boolean,
+    val mode: String = "HYBRID",
+    val allow_local: Boolean = true,
+    val allow_cloud: Boolean = true,
+    val prefer_local: Boolean = false,
+    val ollama_enabled: Boolean = true,
     val ollama_status: String? = null
 )
 
 @Serializable
 data class ComputePolicyUpdate(
-    val mode: String
+    val mode: String = "HYBRID"
 )
 
 @Serializable
 data class WorkerResponse(
-    val worker_id: String,
-    val worker_type: String,
-    val status: String,
+    val worker_id: String = "",
+    val worker_type: String = "",
+    val status: String = "ONLINE",
     val last_heartbeat_at: String? = null,
     val last_seen_at: String? = null,
     val capabilities: List<String> = emptyList(),
@@ -83,41 +83,45 @@ data class WorkerResponse(
 
 @Serializable
 data class ProjectResponse(
-    val project_id: String,
-    val repository_full_name: String,
-    val name: String,
-    val status: String,
-    val health: String,
-    val health_trend: String,
-    val priority_score: Double = 0.0
+    val project_id: String = "",
+    val repository_full_name: String = "",
+    val name: String = "",
+    val status: String = "MANAGED",
+    val health: String = "UNKNOWN",
+    val health_trend: String = "UNKNOWN",
+    val priority_score: Double = 0.0,
+    val owner: String = "",
+    val default_branch: String = "main",
+    val description: String? = null,
+    val vision: String? = null
 )
 
 @Serializable
 data class ProjectAddRequest(
-    val repository_full_name: String
+    val repository_full_name: String = ""
 )
 
 @Serializable
 data class GitHubTokenUpdate(
-    val token: String
+    val token: String = ""
 )
 
 @Serializable
 data class GitHubStatusResponse(
-    val configured: Boolean,
+    val configured: Boolean = false,
     val username: String? = null
 )
 
 @Serializable
 data class LLMKeyUpdate(
-    val provider: String,
-    val api_key: String
+    val provider: String = "",
+    val api_key: String = ""
 )
 
 @Serializable
 data class LLMKeyStatusResponse(
-    val gemini_configured: Boolean,
-    val nvidia_configured: Boolean
+    val gemini_configured: Boolean = false,
+    val nvidia_configured: Boolean = false
 )
 
 @Serializable
@@ -126,7 +130,7 @@ data class EventResponse(
     val event_id: String = "",
     val timestamp: String = "",
     val created_at: String = "",
-    val event_type: String,
+    val event_type: String = "",
     val severity: String = "INFO",
     val details: String = "",
     val payload: Map<String, JsonElement> = emptyMap()
