@@ -86,10 +86,11 @@ EvoForge is designed to run 24/7 in the cloud so it can maintain your GitHub str
 3. Connect your GitHub account and select your EvoForge fork.
 4. Set the **Build Command** to: `curl -LsSf https://astral.sh/uv/install.sh | sh && /opt/render/.cargo/bin/uv sync`
 5. Set the **Start Command** to: `/opt/render/.cargo/bin/uv run python -m evoforge.main server`
+   - The server command reads Render's `$PORT` automatically and binds to `0.0.0.0`.
 6. **Environment Variables**: You must add the following environment variables in your Render dashboard:
    - `GITHUB_TOKEN`: Your Personal Access Token (classic) with `repo` permissions.
    - `GEMINI_API_KEY`: Your Gemini AI API Key.
-   - `WORKER_SECRET_TOKEN`: Set this to `default-dev-token` (this secures your connection to the Android app).
+   - `WORKER_SECRET_TOKEN`: Generate a long random value and store the same value in the Android app's **Bearer Token** field. Never use `default-dev-token` in production.
 7. Click **Deploy**. Wait until Render gives you a URL (e.g., `https://evoforge.onrender.com`).
 
 ### 2. Mobile App Setup (Android)
@@ -100,14 +101,15 @@ The Android app is your "Mission Control" to command the AI agent.
 2. Build and install the APK onto your Android phone.
 3. Open the app and go to the **Settings** tab.
 4. Set the **Control Plane URL** to your exact Render URL (e.g., `https://evoforge.onrender.com`).
-5. Set your **GitHub PAT** and tap **Verify & Save**.
+5. Set your **Bearer Token** to the same value as Render's `WORKER_SECRET_TOKEN`.
+6. Set your **GitHub PAT** and tap **Verify & Save**.
 
 ### 3. Adding Projects & Triggering the AI
 
 1. Go to the **Projects** tab in the Android App.
 2. Tap the blue **`+`** button in the bottom right corner.
 3. Type the repository you want the AI to manage (e.g., `YourUsername/YourRepo`) and tap **Add**.
-4. The AI is programmed to run once every 24 hours. **To force it to run immediately:** Open a web browser and visit `https://YOUR_RENDER_URL.onrender.com/api/force-run-daily`.
+4. The AI is programmed to run once every 24 hours. **To force it to run immediately:** call `https://YOUR_RENDER_URL.onrender.com/api/force-run-daily` with `Authorization: Bearer <WORKER_SECRET_TOKEN>`.
 5. Watch the **Dashboard** tab on your phone to see the AI's telemetry light up as it writes code!
 
 <br>

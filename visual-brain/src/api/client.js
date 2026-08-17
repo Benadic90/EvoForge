@@ -1,4 +1,6 @@
-const API_BASE = 'http://localhost:8000/api';
+const configuredApiBase = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api';
+const trimmedApiBase = configuredApiBase.replace(/\/+$/, '');
+const API_BASE = trimmedApiBase.endsWith('/api') ? trimmedApiBase : `${trimmedApiBase}/api`;
 
 class ApiClient {
   constructor() {

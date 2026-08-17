@@ -1,13 +1,17 @@
 import json
-import logging
 import os
+import threading
+import uuid
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from typing import Any
 
+import structlog
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
 
 from evoforge.agents.factory import build_agent_registry
 from evoforge.api.models import (
@@ -17,11 +21,11 @@ from evoforge.api.models import (
     ExecutorStatusResponse,
     GitHubStatusResponse,
     GitHubTokenUpdate,
-    LLMKeyUpdate,
-    LLMKeyStatusResponse,
     KnowledgeGraphLink,
     KnowledgeGraphNode,
     KnowledgeGraphResponse,
+    LLMKeyStatusResponse,
+    LLMKeyUpdate,
     RoutingDecisionResponse,
     SystemStatusResponse,
     TelemetryExecutionResponse,
@@ -30,6 +34,7 @@ from evoforge.api.models import (
 from evoforge.github_integration.client import GitHubClient
 from evoforge.memory.database import Database
 from evoforge.memory.events import SQLiteEventStore, emitter
+from evoforge.model_router.compute_policy import ComputePolicy
 from evoforge.model_router.executors import create_default_executor_registry
 from evoforge.portfolio.models import ProjectProfile
 from evoforge.portfolio.registry import ProjectRegistry
@@ -37,11 +42,32 @@ from evoforge.runtime.scheduler import SchedulerEngine
 from evoforge.runtime.worker import WorkerHealth, WorkerProfile, WorkerRegistry, WorkerStatus
 from evoforge.utils.config import load_config
 
-security = HTTPBearer()
-def get_worker_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    expected_token = os.environ.get("WORKER_SECRET_TOKEN", "default-dev-token")
-    if credentials.credentials != expected_token:
-        raise HTTPException(status_code=401, detail="Invalid worker token")
+logger = structlog.get_logger(__name__)
+security = HTTPBearer(auto_error=False)
+worker_credentials = Depends(security)
+
+
+def _expected_worker_token() -> str:
+    token = os.environ.get("WORKER_SECRET_TOKEN")
+    allow_dev_token = os.environ.get("EVOFORGE_ALLOW_DEFAULT_DEV_TOKEN") == "1"
+    if not token and allow_dev_token:
+        return "default-dev-token"
+    if not token or (token == "default-dev-token" and not allow_dev_token):
+        raise HTTPException(
+            status_code=503,
+            detail="WORKER_SECRET_TOKEN is not configured for production",
+        )
+    return token
+
+
+def get_worker_token(credentials: HTTPAuthorizationCredentials | None = worker_credentials):
+    expected_token = _expected_worker_token()
+    if credentials is None or credentials.credentials != expected_token:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid worker token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return credentials.credentials
 
 # Setup database & registries
@@ -57,9 +83,10 @@ scheduler = SchedulerEngine(db, None, None)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logging.info("Starting EvoForge API Server")
+    logger.info("api_server_starting")
+    initialize_startup_state()
     yield
-    logging.info("Shutting down EvoForge API Server")
+    logger.info("api_server_stopping")
 
 
 app = FastAPI(
@@ -82,7 +109,11 @@ app.add_middleware(
 def read_root():
     return {"status": "EvoForge Control Plane is online.", "docs_url": "/docs"}
 
-@app.get("/api/status", response_model=SystemStatusResponse)
+@app.get(
+    "/api/status",
+    response_model=SystemStatusResponse,
+    dependencies=[Depends(get_worker_token)],
+)
 def get_status() -> SystemStatusResponse:
     """Returns real-time system status, active workflows, and executor health."""
     summary = db.get_system_status_summary()
@@ -90,8 +121,18 @@ def get_status() -> SystemStatusResponse:
     all_executors = executor_registry.list_all()
     healthy_count = sum(1 for e in all_executors if executor_registry.is_healthy(e))
     unhealthy_count = len(all_executors) - healthy_count
+    workers = worker_registry.list_all()
+    scheduler_status = scheduler.get_status()
+    queued_task_rows = db.fetchall(
+        """
+        SELECT COUNT(*) as count
+        FROM tasks
+        WHERE LOWER(status) IN ('pending', 'queued', 'ready', 'discovered', 'planned')
+        """
+    )
+    queued_tasks = int(queued_task_rows[0]["count"]) if queued_task_rows else 0
 
-    from datetime import datetime, UTC
+    compute_policy = ComputePolicy.load_from_db(db)
     return SystemStatusResponse(
         status="success",
         timestamp=datetime.now(UTC).isoformat(),
@@ -100,6 +141,20 @@ def get_status() -> SystemStatusResponse:
         failed_workflows=summary["failed_workflows"],
         paused_workflows=summary["paused_workflows"],
         complete_workflows=summary["complete_workflows"],
+        workflows={
+            "active": summary["active_workflows"],
+            "failed": summary["failed_workflows"],
+            "paused": summary["paused_workflows"],
+            "complete": summary["complete_workflows"],
+        },
+        queued_tasks=queued_tasks,
+        workers={
+            "online": len([w for w in workers if w.status != WorkerStatus.OFFLINE]),
+            "total": len(workers),
+        },
+        agents={"total": len(agent_registry.list())},
+        scheduler=scheduler_status,
+        compute_mode=compute_policy.mode,
         healthy_executors=healthy_count,
         unhealthy_executors=unhealthy_count,
         recent_failures=summary["recent_failures"],
@@ -150,10 +205,10 @@ def list_agents() -> list[AgentStatusResponse]:
 
 # --- WORKER API ---
 
-@app.get("/api/workers")
+@app.get("/api/workers", dependencies=[Depends(get_worker_token)])
 def list_workers():
     workers = worker_registry.list_all()
-    return {"workers": [w.model_dump() for w in workers]}
+    return [w.model_dump() for w in workers]
 
 @app.post("/api/workers/register")
 def register_worker(profile: dict, token: str = Depends(get_worker_token)):
@@ -179,8 +234,6 @@ def drain_worker(worker_id: str, token: str = Depends(get_worker_token)):
 @app.post("/api/workers/{worker_id}/request-work")
 def request_work(worker_id: str, token: str = Depends(get_worker_token)):
     # Very simple queue polling: find pending workflow, try to lease it.
-    from datetime import UTC, datetime
-    now = datetime.now(UTC).isoformat()
     # Find one pending workflow
     query = "SELECT id, state_snapshot FROM workflows WHERE status = 'pending' LIMIT 1"
     rows = db.fetchall(query)
@@ -226,11 +279,34 @@ def release_work(worker_id: str, payload: dict, token: str = Depends(get_worker_
 
 # --- SCHEDULER API ---
 
-@app.get("/api/scheduler/status")
+@app.get("/api/scheduler/status", dependencies=[Depends(get_worker_token)])
 def get_scheduler_status():
     return scheduler.get_status()
 
-@app.get("/api/runtime/status")
+def initialize_startup_state():
+    # Attempt to start the scheduler in the background if configured
+    if hasattr(scheduler, "start"):
+        pass # We use force-run-daily for now
+        
+    # Automatically register the user's project if the DB was wiped (e.g. Render ephemeral disk)
+    try:
+        reg = ProjectRegistry(db)
+        if not reg.get_by_repo("Benadic90/agilityshift"):
+            default_project = ProjectProfile(
+                project_id=f"proj_{uuid.uuid4().hex[:8]}",
+                repository_full_name="Benadic90/agilityshift",
+                repository_url="https://github.com/Benadic90/agilityshift",
+                owner="Benadic90",
+                name="agilityshift",
+                default_branch="main",
+                status="MANAGED"
+            )
+            reg.register(default_project)
+            logger.info("default_project_auto_registered", repository="Benadic90/agilityshift")
+    except Exception as e:
+        logger.error("default_project_auto_register_failed", error=str(e))
+
+@app.get("/api/runtime/status", dependencies=[Depends(get_worker_token)])
 def get_runtime_status():
     st = scheduler.get_status()
     workers = worker_registry.list_all()
@@ -670,23 +746,28 @@ from evoforge.portfolio.models import (
 )
 
 
-@app.get("/api/projects", response_model=list[ProjectProfile])
-def api_list_projects(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0)) -> list[ProjectProfile]:
-    from evoforge.portfolio.registry import ProjectRegistry
+@app.get(
+    "/api/projects",
+    response_model=list[ProjectProfile],
+    dependencies=[Depends(get_worker_token)],
+)
+def api_list_projects(
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+) -> list[ProjectProfile]:
     registry = ProjectRegistry(db)
     projects = registry.list()
     return projects[offset:offset+limit]
 
-from pydantic import BaseModel
-
 class ProjectAddRequest(BaseModel):
     repository_full_name: str
 
-@app.post("/api/projects", response_model=ProjectProfile)
+@app.post(
+    "/api/projects",
+    response_model=ProjectProfile,
+    dependencies=[Depends(get_worker_token)],
+)
 def api_add_project(req: ProjectAddRequest) -> ProjectProfile:
-    import uuid
-
-    from evoforge.portfolio.registry import ProjectRegistry
     registry = ProjectRegistry(db)
     
     if registry.get_by_repo(req.repository_full_name):
@@ -722,36 +803,41 @@ def api_add_project(req: ProjectAddRequest) -> ProjectProfile:
     registry.register(profile)
     return profile
 
-@app.get("/api/force-run-daily")
+@app.get("/api/force-run-daily", dependencies=[Depends(get_worker_token)])
 def api_force_run_daily():
     """Forces the daily AI agent loop to run immediately in the background."""
-    import threading
     from evoforge.main import run_daily
     
     def background_task():
         try:
             run_daily()
         except Exception as e:
-            logging.error(f"Background run_daily failed: {e}")
+            logger.error("background_run_daily_failed", error=str(e))
             
     thread = threading.Thread(target=background_task)
     thread.daemon = True
     thread.start()
     return {"status": "success", "message": "The AI Agent has been awoken and is now running in the background."}
 
-@app.get("/api/projects/{project_id}", response_model=ProjectProfile)
+@app.get(
+    "/api/projects/{project_id}",
+    response_model=ProjectProfile,
+    dependencies=[Depends(get_worker_token)],
+)
 def api_get_project(project_id: str) -> ProjectProfile:
-    from evoforge.portfolio.registry import ProjectRegistry
     registry = ProjectRegistry(db)
     p = registry.get(project_id)
     if not p:
         raise HTTPException(status_code=404, detail="Project not found")
     return p
 
-@app.get("/api/projects/{project_id}/health", response_model=ProjectHealthReport)
+@app.get(
+    "/api/projects/{project_id}/health",
+    response_model=ProjectHealthReport,
+    dependencies=[Depends(get_worker_token)],
+)
 def api_get_project_health(project_id: str) -> ProjectHealthReport:
     from evoforge.github_integration.client import GitHubClient
-    from evoforge.portfolio.registry import ProjectRegistry
     from evoforge.portfolio.scanner import ProjectScanner
     
     registry = ProjectRegistry(db)
@@ -769,10 +855,13 @@ def api_get_project_health(project_id: str) -> ProjectHealthReport:
         logger.error("scan_failed", project_id=project_id, error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/projects/{project_id}/roadmap", response_model=ProjectRoadmap)
+@app.get(
+    "/api/projects/{project_id}/roadmap",
+    response_model=ProjectRoadmap,
+    dependencies=[Depends(get_worker_token)],
+)
 def api_get_project_roadmap(project_id: str) -> ProjectRoadmap:
     from evoforge.memory.obsidian import ObsidianManager
-    from evoforge.portfolio.registry import ProjectRegistry
     from evoforge.portfolio.roadmap import RoadmapSynchronizer
     
     registry = ProjectRegistry(db)
@@ -790,8 +879,16 @@ def api_get_project_roadmap(project_id: str) -> ProjectRoadmap:
         logger.error("sync_failed", project_id=project_id, error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/projects/{project_id}/tasks", response_model=list[PortfolioTask])
-def api_get_project_tasks(project_id: str, limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0)) -> list[PortfolioTask]:
+@app.get(
+    "/api/projects/{project_id}/tasks",
+    response_model=list[PortfolioTask],
+    dependencies=[Depends(get_worker_token)],
+)
+def api_get_project_tasks(
+    project_id: str,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+) -> list[PortfolioTask]:
     query = "SELECT * FROM portfolio_tasks WHERE project_id = ? LIMIT ? OFFSET ?"
     rows = db.fetchall(query, (project_id, limit, offset))
     
@@ -824,7 +921,6 @@ def api_get_project_tasks(project_id: str, limit: int = Query(50, ge=1, le=100),
 
 @app.get("/api/portfolio/health", response_model=PortfolioHealth)
 def api_get_portfolio_health() -> PortfolioHealth:
-    from evoforge.portfolio.registry import ProjectRegistry
     registry = ProjectRegistry(db)
     projects = registry.list()
     total = len(projects)
@@ -852,7 +948,6 @@ def api_get_portfolio_health() -> PortfolioHealth:
 @app.get("/api/portfolio/ranking", response_model=list[PortfolioRanking])
 def api_get_portfolio_ranking(limit: int = Query(50, ge=1, le=100)) -> list[PortfolioRanking]:
     from evoforge.portfolio.priority_engine import PortfolioPriorityEngine
-    from evoforge.portfolio.registry import ProjectRegistry
     registry = ProjectRegistry(db)
     engine = PortfolioPriorityEngine(db, registry)
     return engine.rank_projects()[:limit]
@@ -861,7 +956,6 @@ def api_get_portfolio_ranking(limit: int = Query(50, ge=1, le=100)) -> list[Port
 def api_get_daily_plan() -> DailyPortfolioPlan:
     from evoforge.portfolio.daily_planner import DailyPlanner
     from evoforge.portfolio.priority_engine import PortfolioPriorityEngine
-    from evoforge.portfolio.registry import ProjectRegistry
     registry = ProjectRegistry(db)
     
     try:
@@ -910,10 +1004,11 @@ def api_get_all_tasks(limit: int = Query(50, ge=1, le=100), offset: int = Query(
 
 # --- Settings & Compute Mode Endpoints ---
 
-from evoforge.model_router.compute_policy import ComputePolicy
-
-
-@app.get("/api/settings/compute", response_model=ComputePolicy)
+@app.get(
+    "/api/settings/compute",
+    response_model=ComputePolicy,
+    dependencies=[Depends(get_worker_token)],
+)
 def api_get_compute_policy() -> ComputePolicy:
     policy = ComputePolicy.load_from_db(db)
     
@@ -925,7 +1020,11 @@ def api_get_compute_policy() -> ComputePolicy:
         
     return policy
 
-@app.post("/api/settings/compute", response_model=ComputePolicy)
+@app.post(
+    "/api/settings/compute",
+    response_model=ComputePolicy,
+    dependencies=[Depends(get_worker_token)],
+)
 def api_update_compute_policy(policy: ComputePolicy) -> ComputePolicy:
     policy.save_to_db(db)
     
@@ -937,7 +1036,11 @@ def api_update_compute_policy(policy: ComputePolicy) -> ComputePolicy:
     
     return policy
 
-@app.put("/api/settings/compute", response_model=ComputePolicy)
+@app.put(
+    "/api/settings/compute",
+    response_model=ComputePolicy,
+    dependencies=[Depends(get_worker_token)],
+)
 def api_put_compute_policy(policy: ComputePolicy) -> ComputePolicy:
     return api_update_compute_policy(policy)
 
@@ -1031,9 +1134,6 @@ def api_list_experiments(limit: int = Query(50, ge=1, le=100), offset: int = Que
     query = "SELECT * FROM experiment_records ORDER BY started_at DESC LIMIT ? OFFSET ?"
     rows = db.fetchall(query, (limit, offset))
     return [ExperimentRecord(**dict(row)) for row in rows]
-
-from pydantic import BaseModel
-
 
 class ApprovalRequest(BaseModel):
     deployment_type: str = "FULL"
@@ -1136,19 +1236,6 @@ def get_llm_key_status():
         return GitHubStatusResponse(configured=True, username=user)
     except Exception:
         return GitHubStatusResponse(configured=False, username=None)
-
-@app.get("/api/projects", response_model=list[ProjectProfile], dependencies=[Depends(get_worker_token)])
-def list_projects():
-    registry = ProjectRegistry(db)
-    return registry.list()
-
-@app.get("/api/projects/{project_id}", response_model=ProjectProfile, dependencies=[Depends(get_worker_token)])
-def get_project(project_id: str):
-    registry = ProjectRegistry(db)
-    profile = registry.get(project_id)
-    if not profile:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return profile
 
 def start_server():
     """Starts the FastAPI server."""

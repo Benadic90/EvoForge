@@ -46,7 +46,9 @@ export default function WorkerFleetView({ realTimeState }) {
       </h1>
 
       <div style={{ display: 'grid', gap: '16px' }}>
-        {workers.map((worker) => (
+        {workers.map((worker) => {
+          const heartbeat = worker.last_heartbeat_at || worker.last_heartbeat || worker.last_seen_at;
+          return (
           <div key={worker.worker_id} className="glass-panel" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
@@ -68,8 +70,8 @@ export default function WorkerFleetView({ realTimeState }) {
               </div>
               
               <div style={{ fontSize: '13px', color: 'var(--text-muted)', display: 'flex', gap: '24px' }}>
-                <div><strong>Capabilities:</strong> {worker.capabilities.join(', ') || 'None'}</div>
-                <div><strong>Last Heartbeat:</strong> {new Date(worker.last_heartbeat).toLocaleTimeString()}</div>
+                <div><strong>Capabilities:</strong> {(worker.capabilities || []).join(', ') || 'None'}</div>
+                <div><strong>Last Heartbeat:</strong> {heartbeat ? new Date(heartbeat).toLocaleTimeString() : 'Never'}</div>
               </div>
               
               {worker.current_workflow_id && (
@@ -99,7 +101,8 @@ export default function WorkerFleetView({ realTimeState }) {
               </button>
             </div>
           </div>
-        ))}
+          );
+        })}
 
         {workers.length === 0 && (
           <div className="glass-panel" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>

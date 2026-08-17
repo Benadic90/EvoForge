@@ -1,7 +1,7 @@
 import json
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError, model_validator
 
 
 class ComputePolicy(BaseModel):
@@ -12,6 +12,22 @@ class ComputePolicy(BaseModel):
     ollama_enabled: bool = True
     ollama_status: str | None = None  # Populated at runtime
 
+    @model_validator(mode="after")
+    def normalize_mode_flags(self) -> "ComputePolicy":
+        """Keep legacy booleans consistent when clients send only `mode`."""
+        if self.mode == "LOCAL":
+            self.allow_local = True
+            self.allow_cloud = False
+            self.prefer_local = True
+        elif self.mode == "CLOUD":
+            self.allow_local = False
+            self.allow_cloud = True
+            self.prefer_local = False
+        else:
+            self.allow_local = True
+            self.allow_cloud = True
+        return self
+
     @classmethod
     def load_from_db(cls, db) -> "ComputePolicy":
         """Loads ComputePolicy from the database system_settings."""
@@ -20,8 +36,8 @@ class ComputePolicy(BaseModel):
             try:
                 data = json.loads(val)
                 return cls(**data)
-            except Exception:
-                pass
+            except (json.JSONDecodeError, TypeError, ValueError, ValidationError):
+                return cls()
         return cls()
 
     def save_to_db(self, db) -> None:

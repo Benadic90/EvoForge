@@ -94,7 +94,7 @@ fun SettingsScreen(systemViewModel: SystemViewModel, authManager: AuthManager) {
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = {
                         Text(
-                            "http://192.168.1.5:8000",
+                            "https://evoforge.onrender.com",
                             style = MaterialTheme.typography.bodyMedium
                         )
                     },

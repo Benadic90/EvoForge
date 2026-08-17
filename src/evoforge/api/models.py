@@ -13,6 +13,12 @@ class SystemStatusResponse(BaseModel):
     failed_workflows: int
     paused_workflows: int
     complete_workflows: int
+    workflows: dict[str, int] = Field(default_factory=dict)
+    queued_tasks: int = 0
+    workers: dict[str, Any] = Field(default_factory=dict)
+    agents: dict[str, Any] = Field(default_factory=dict)
+    scheduler: dict[str, Any] = Field(default_factory=dict)
+    compute_mode: str = "HYBRID"
     healthy_executors: int
     unhealthy_executors: int
     recent_failures: list[dict[str, Any]] = Field(default_factory=list)

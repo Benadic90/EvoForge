@@ -14,6 +14,19 @@ app = typer.Typer(help="EvoForge Autonomous AI Software Engineering Platform", n
 evolution_app = typer.Typer(help="Manage Phase 6 Controlled Self-Evolution", no_args_is_help=True)
 app.add_typer(evolution_app, name="evolution")
 
+
+def _control_plane_token() -> str:
+    import os
+
+    token = os.environ.get("WORKER_SECRET_TOKEN")
+    if token:
+        return token
+    if os.environ.get("EVOFORGE_ALLOW_DEFAULT_DEV_TOKEN") == "1":
+        return "default-dev-token"
+    raise typer.BadParameter(
+        "WORKER_SECRET_TOKEN is required. Set EVOFORGE_ALLOW_DEFAULT_DEV_TOKEN=1 only for local development."
+    )
+
 @app.command()
 def run_daily():
     """
@@ -1048,11 +1061,18 @@ def compute_mode(mode: str = typer.Argument(..., help="Mode: local, cloud, or hy
     compute_status()
 
 @app.command("server")
-def run_server(port: int = 8000, host: str = "127.0.0.1"):
+def run_server(
+    port: int | None = typer.Option(None, help="Port to bind. Defaults to $PORT or 8000."),
+    host: str | None = typer.Option(None, help="Host to bind. Defaults to $HOST or 0.0.0.0."),
+):
     """Run the headless control plane API server."""
+    import os
+
     import uvicorn
-    console.print(f"[green]Starting EvoForge Control Plane on {host}:{port}[/green]")
-    uvicorn.run("evoforge.api.server:app", host=host, port=port, log_level="info")
+    resolved_host = host or os.environ.get("HOST") or "0.0.0.0"
+    resolved_port = port or int(os.environ.get("PORT", "8000"))
+    console.print(f"[green]Starting EvoForge Control Plane on {resolved_host}:{resolved_port}[/green]")
+    uvicorn.run("evoforge.api.server:app", host=resolved_host, port=resolved_port, log_level="info")
 
 @app.command("scheduler")
 def run_scheduler(interval: int = 3600):
@@ -1085,7 +1105,6 @@ def run_worker(type: str = typer.Option("cloud", help="Worker type: cloud or lap
                worker_id: str = typer.Option(None, help="Unique worker ID"),
                control_plane: str = typer.Option("http://127.0.0.1:8000", help="Control Plane URL")):
     """Run a headless worker node."""
-    import os
     import uuid
 
     from evoforge.agents.factory import build_agent_registry
@@ -1100,7 +1119,7 @@ def run_worker(type: str = typer.Option("cloud", help="Worker type: cloud or lap
     if not worker_id:
         worker_id = f"worker-{uuid.uuid4().hex[:8]}"
         
-    token = os.environ.get("WORKER_SECRET_TOKEN", "default-dev-token")
+    token = _control_plane_token()
     
     cfg = load_config()
     db = Database(cfg.database.sqlite_path)
@@ -1132,14 +1151,12 @@ def run_worker(type: str = typer.Option("cloud", help="Worker type: cloud or lap
 @app.command("worker-status")
 def worker_status():
     """Show the status of all registered workers."""
-    import os
-
     import httpx
-    token = os.environ.get("WORKER_SECRET_TOKEN", "default-dev-token")
+    token = _control_plane_token()
     try:
         resp = httpx.get("http://127.0.0.1:8000/api/workers", headers={"Authorization": f"Bearer {token}"})
         resp.raise_for_status()
-        workers = resp.json()["workers"]
+        workers = resp.json()
         table = Table(title="Worker Registry Status")
         table.add_column("Worker ID")
         table.add_column("Type")
@@ -1157,10 +1174,8 @@ def worker_status():
 @app.command("worker-drain")
 def worker_drain(worker_id: str):
     """Gracefully drain a worker."""
-    import os
-
     import httpx
-    token = os.environ.get("WORKER_SECRET_TOKEN", "default-dev-token")
+    token = _control_plane_token()
     try:
         resp = httpx.post(f"http://127.0.0.1:8000/api/workers/{worker_id}/drain", headers={"Authorization": f"Bearer {token}"})
         resp.raise_for_status()
@@ -1172,8 +1187,12 @@ def worker_drain(worker_id: str):
 def scheduler_status():
     """Show the status of the cloud scheduler."""
     import httpx
+    token = _control_plane_token()
     try:
-        resp = httpx.get("http://127.0.0.1:8000/api/scheduler/status")
+        resp = httpx.get(
+            "http://127.0.0.1:8000/api/scheduler/status",
+            headers={"Authorization": f"Bearer {token}"},
+        )
         resp.raise_for_status()
         st = resp.json()
         table = Table(title="Scheduler Status")
@@ -1187,8 +1206,12 @@ def scheduler_status():
 def runtime_status():
     """Show overall runtime status including workers and scheduler."""
     import httpx
+    token = _control_plane_token()
     try:
-        resp = httpx.get("http://127.0.0.1:8000/api/runtime/status")
+        resp = httpx.get(
+            "http://127.0.0.1:8000/api/runtime/status",
+            headers={"Authorization": f"Bearer {token}"},
+        )
         resp.raise_for_status()
         st = resp.json()
         

@@ -1,9 +1,6 @@
 package com.evoforge.mobile.data.api
 
-import com.evoforge.mobile.core.auth.AuthManager
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
-import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
@@ -25,10 +22,7 @@ object ApiClient {
 
     fun getService(baseUrl: String?, token: String?, forceRebuild: Boolean = false): ApiService? {
         
-        if (baseUrl.isNullOrBlank()) return null
-
-        // Ensure URL ends with trailing slash
-        val safeBaseUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+        val safeBaseUrl = normalizeBaseUrl(baseUrl) ?: return null
 
         if (retrofit == null || currentBaseUrl != safeBaseUrl || forceRebuild) {
             val loggingInterceptor = HttpLoggingInterceptor().apply {
@@ -66,5 +60,24 @@ object ApiClient {
         }
 
         return retrofit?.create(ApiService::class.java)
+    }
+
+    private fun normalizeBaseUrl(baseUrl: String?): String? {
+        var normalized = baseUrl?.trim().orEmpty()
+        if (normalized.isBlank()) return null
+
+        if (!normalized.startsWith("http://") && !normalized.startsWith("https://")) {
+            normalized = "https://$normalized"
+        }
+
+        normalized = normalized.trimEnd('/')
+        if (normalized.contains("/api/")) {
+            normalized = normalized.substringBefore("/api/")
+        }
+        if (normalized.endsWith("/api")) {
+            normalized = normalized.removeSuffix("/api")
+        }
+
+        return "$normalized/"
     }
 }
