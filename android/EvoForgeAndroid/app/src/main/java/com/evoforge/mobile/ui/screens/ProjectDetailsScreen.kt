@@ -174,6 +174,26 @@ fun MetricRow(label: String, value: Double?) {
 }
 
 @Composable
+fun StatusChip(
+    text: String,
+    containerColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primaryContainer,
+    contentColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onPrimaryContainer
+) {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = containerColor
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            color = contentColor,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@Composable
 fun RoadmapTab(roadmap: ProjectRoadmap?) {
     LazyColumn(
         contentPadding = PaddingValues(20.dp),
@@ -201,12 +221,11 @@ fun RoadmapTab(roadmap: ProjectRoadmap?) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(milestone.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Badge(
+                        StatusChip(
+                            text = milestone.status,
                             containerColor = MaterialTheme.colorScheme.primaryContainer,
                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        ) {
-                            Text(milestone.status)
-                        }
+                        )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(milestone.description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -243,19 +262,17 @@ fun TasksTab(tasks: List<PortfolioTask>) {
                     Text(task.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
                     Spacer(modifier = Modifier.height(12.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Badge(
+                        StatusChip(
+                            text = task.status,
                             containerColor = MaterialTheme.colorScheme.secondaryContainer,
                             contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                        ) {
-                            Text(task.status)
-                        }
+                        )
                         if (task.priority > 0.0) {
-                            Badge(
+                            StatusChip(
+                                text = "P: ${task.priority}",
                                 containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                                 contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-                            ) {
-                                Text("P: ${task.priority}")
-                            }
+                            )
                         }
                     }
                 }

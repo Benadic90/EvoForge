@@ -193,7 +193,7 @@ class SystemViewModel(private val authManager: AuthManager) : ViewModel() {
             try {
                 val response = apiService?.addProject(com.evoforge.mobile.data.model.ProjectAddRequest(repo))
                 if (response?.isSuccessful == true) {
-                    fetchProjects() // Refresh the list
+                    refreshProjects() // Refresh the list
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -254,7 +254,7 @@ class SystemViewModel(private val authManager: AuthManager) : ViewModel() {
                     fetchComputePolicy()
                     fetchGitHubStatus()
                     fetchLLMKeyStatus()
-                    fetchProjects()
+                    refreshProjects()
                 }
                 delay(5000) // Poll every 5s
             }
