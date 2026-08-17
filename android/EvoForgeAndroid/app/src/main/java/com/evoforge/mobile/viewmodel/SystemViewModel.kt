@@ -246,6 +246,25 @@ class SystemViewModel(private val authManager: AuthManager) : ViewModel() {
         }
     }
 
+    fun triggerDailyRun(onResult: (Boolean, String) -> Unit = { _, _ -> }) {
+        viewModelScope.launch {
+            apiService?.let { api ->
+                try {
+                    val response = api.forceRunDaily()
+                    if (response.isSuccessful) {
+                        onResult(true, "AI Agent awoken! Daily scan started.")
+                        fetchStatus()
+                        refreshProjects()
+                    } else {
+                        onResult(false, "Failed to start daily run: HTTP ${response.code()}")
+                    }
+                } catch (e: Exception) {
+                    onResult(false, e.localizedMessage ?: "Connection error")
+                }
+            } ?: onResult(false, "Not connected to Control Plane")
+        }
+    }
+
     private fun startPolling() {
         viewModelScope.launch {
             while (isActive) {

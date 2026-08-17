@@ -117,6 +117,56 @@ fun HomeScreen(systemViewModel: SystemViewModel) {
             statusColor = if (isOnline) StatusInfo else TextTertiaryDark
         )
 
+        Spacer(modifier = Modifier.height(16.dp))
+
+        var isTriggering by remember { mutableStateOf(false) }
+        var triggerMessage by remember { mutableStateOf<String?>(null) }
+
+        Button(
+            onClick = {
+                isTriggering = true
+                systemViewModel.triggerDailyRun { success, msg ->
+                    isTriggering = false
+                    triggerMessage = msg
+                }
+            },
+            enabled = isOnline && !isTriggering,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary
+            ),
+            contentPadding = PaddingValues(vertical = 14.dp)
+        ) {
+            if (isTriggering) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 2.dp
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text("Waking up AI agent...", style = MaterialTheme.typography.titleSmall)
+            } else {
+                Icon(
+                    Icons.Rounded.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text("Trigger Autonomous Daily Run", style = MaterialTheme.typography.titleSmall)
+            }
+        }
+
+        if (triggerMessage != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                triggerMessage!!,
+                style = MaterialTheme.typography.bodySmall,
+                color = StatusOnline,
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
+        }
+
         Spacer(modifier = Modifier.height(32.dp))
 
         // Quick Stats

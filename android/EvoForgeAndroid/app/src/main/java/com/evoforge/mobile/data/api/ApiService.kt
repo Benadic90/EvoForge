@@ -57,4 +57,7 @@ interface ApiService {
 
     @GET("api/llm/keys/status")
     suspend fun getLLMKeyStatus(): Response<LLMKeyStatusResponse>
+
+    @GET("api/force-run-daily")
+    suspend fun forceRunDaily(): Response<Map<String, String>>
 }
