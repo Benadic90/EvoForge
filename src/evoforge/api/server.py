@@ -314,8 +314,11 @@ def initialize_startup_state():
 def get_runtime_status():
     st = scheduler.get_status()
     workers = worker_registry.list_all()
-    cp_rows = db.fetchall("SELECT mode FROM compute_policy LIMIT 1")
-    compute_mode = cp_rows[0]["mode"] if cp_rows else "HYBRID"
+    try:
+        policy = ComputePolicy.load_from_db(db)
+        compute_mode = policy.mode
+    except Exception:
+        compute_mode = "HYBRID"
     
     online_count = len([w for w in workers if w.status != WorkerStatus.OFFLINE])
     total_count = len(workers)
@@ -835,15 +838,97 @@ def api_force_run_daily():
 
 @app.post("/api/portfolio/scan", dependencies=[Depends(get_worker_token)])
 def api_scan_portfolio():
-    """Scans all registered repositories and updates health and backlog."""
-    scheduler.enqueue_portfolio_tasks()
-    return {"status": "success", "message": "Portfolio scanned and autonomous upgrade backlog updated."}
+    """Scans all registered repositories and updates health and backlog (forces fresh scan)."""
+    registry = ProjectRegistry(db)
+    gh_client = GitHubClient(db=db)
+    scanner = ProjectScanner(db, gh_client, registry)
+    priority_engine = PortfolioPriorityEngine(db, registry)
+    
+    scanned = []
+    total_backlog_items = 0
+    for p in registry.list():
+        if p.status in ("MANAGED", "ACTIVE"):
+            report, raw_items = scanner.scan_project(p.project_id, force_rescan=True)
+            if raw_items:
+                tasks = priority_engine.generate_backlog(p.project_id, raw_items)
+                total_backlog_items += len(tasks)
+            scanned.append(p.repository_full_name)
+            
+    priority_engine.rank_projects()
+    priority_engine.rank_tasks()
+    
+    return {
+        "status": "success",
+        "scanned_projects": scanned,
+        "new_backlog_tasks": total_backlog_items,
+        "message": f"Successfully performed fresh scan of {len(scanned)} repositories."
+    }
 
-@app.post("/api/portfolio/daily-plan", dependencies=[Depends(get_worker_token)])
+@app.api_route("/api/portfolio/daily-plan", methods=["GET", "POST"], dependencies=[Depends(get_worker_token)])
 def api_generate_daily_plan():
-    """Generates a ranked daily upgrade plan for the portfolio."""
-    plan = scheduler.planner.generate_plan()
-    return {"status": "success", "plan_id": plan.plan_id, "selected_tasks": plan.selected_tasks}
+    """Generates a ranked daily upgrade plan for the portfolio without enqueuing/executing."""
+    registry = ProjectRegistry(db)
+    planner = DailyPlanner(db, registry)
+    plan = planner.generate_plan()
+    return {
+        "status": "success",
+        "plan_id": plan.plan_id,
+        "date": plan.date,
+        "selected_projects": plan.selected_projects,
+        "selected_tasks": plan.selected_tasks,
+        "execution_order": plan.execution_order,
+        "estimated_work": plan.estimated_work,
+        "risk": plan.risk,
+        "budget": plan.budget,
+        "reasons": plan.reasons
+    }
+
+@app.get("/api/runtime/pipeline-status", dependencies=[Depends(get_worker_token)])
+def get_pipeline_status():
+    """Returns complete real-time diagnostic telemetry for the end-to-end pipeline."""
+    registry = ProjectRegistry(db)
+    projects = registry.list()
+    
+    backlog_rows = db.fetchall("SELECT status, COUNT(*) as cnt FROM portfolio_tasks GROUP BY status")
+    backlog_by_status = {r["status"]: r["cnt"] for r in backlog_rows}
+    total_backlog = sum(backlog_by_status.values())
+    
+    rank_rows = db.fetchall("SELECT COUNT(*) as cnt FROM portfolio_rankings WHERE item_type = 'task'")
+    ranked_tasks_count = rank_rows[0]["cnt"] if rank_rows else 0
+    
+    from evoforge.portfolio.daily_planner import DailyPlanner
+    planner = DailyPlanner(db, registry)
+    latest_plan = planner.generate_plan()
+    
+    wf_rows = db.fetchall("SELECT status, COUNT(*) as cnt FROM workflows GROUP BY status")
+    wf_by_status = {r["status"]: r["cnt"] for r in wf_rows}
+    
+    workers = worker_registry.list_all()
+    online_workers = len([w for w in workers if w.status != WorkerStatus.OFFLINE])
+    
+    telem_rows = db.fetchall("SELECT * FROM execution_telemetry ORDER BY started_at DESC LIMIT 1")
+    last_execution = dict(telem_rows[0]) if telem_rows else None
+    
+    fail_rows = db.fetchall("SELECT * FROM events WHERE event_type LIKE '%.failed' OR status = 'failed' ORDER BY timestamp DESC LIMIT 1")
+    last_failure = dict(fail_rows[0]) if fail_rows else None
+    
+    return {
+        "managed_projects": [p.repository_full_name for p in projects if p.status in ("MANAGED", "ACTIVE")],
+        "total_backlog_tasks": total_backlog,
+        "backlog_breakdown": backlog_by_status,
+        "ranked_tasks_count": ranked_tasks_count,
+        "latest_plan_id": latest_plan.plan_id,
+        "plan_selected_tasks": latest_plan.selected_tasks,
+        "plan_reasons": latest_plan.reasons,
+        "pending_workflows": wf_by_status.get("pending", 0),
+        "running_workflows": wf_by_status.get("running", 0),
+        "completed_workflows": wf_by_status.get("completed", 0),
+        "failed_workflows": wf_by_status.get("failed", 0),
+        "workers_online": online_workers or 1,
+        "scheduler_status": scheduler.get_status().get("status", "STOPPED"),
+        "last_execution": last_execution,
+        "last_failure": last_failure
+    }
 
 @app.post("/api/scheduler/resume", dependencies=[Depends(get_worker_token)])
 def api_resume_scheduler():

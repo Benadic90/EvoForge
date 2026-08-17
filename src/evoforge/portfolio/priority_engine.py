@@ -31,19 +31,32 @@ class PortfolioPriorityEngine:
 
     def generate_backlog(self, project_id: str, raw_items: list[dict[str, Any]]) -> list[PortfolioTask]:
         """
-        Normalize diverse items (GH issues, CI failures) into PortfolioTasks.
-        raw_items is a list of dicts with keys: source, source_id, title, description,
-        priority_hint, risk_hint, etc.
+        Normalize diverse items (GH issues, CI failures, autonomous upgrades) into PortfolioTasks.
+        Deduplicates by (project_id, source_id) so existing tasks are not re-inserted.
         """
+        existing_rows = self.db.fetchall("SELECT source_id, task_id, status FROM portfolio_tasks WHERE project_id = ?", (project_id,))
+        existing_sources = {r["source_id"] for r in existing_rows}
+        
+        # Get repository full name if available
+        profile = self.registry.get(project_id)
+        repo_name = profile.repository_full_name if profile else None
+
         tasks = []
         for item in raw_items:
+            source_id = str(item.get("source_id", uuid.uuid4()))
+            if source_id in existing_sources:
+                continue
+
             task = PortfolioTask(
                 task_id=f"ptask_{uuid.uuid4().hex[:8]}",
                 project_id=project_id,
+                repository_full_name=repo_name or item.get("repository_full_name"),
                 title=item.get("title") or "Untitled Task",
                 description=item.get("description") or "",
                 source=item.get("source", "unknown"),
-                source_id=str(item.get("source_id", uuid.uuid4())),
+                source_type=item.get("source_type", "unknown"),
+                source_id=source_id,
+                source_url=item.get("source_url"),
                 priority=float(item.get("priority_hint", 0.0)),
                 risk=item.get("risk_hint", "LOW"),
                 estimated_minutes=item.get("estimated_minutes", None),
@@ -56,8 +69,9 @@ class PortfolioPriorityEngine:
             )
             self._save_task(task)
             tasks.append(task)
+            existing_sources.add(source_id)
             
-        logger.info("backlog_generated", project_id=project_id, task_count=len(tasks))
+        logger.info("backlog_generated", project_id=project_id, new_tasks=len(tasks))
         return tasks
 
     def rank_projects(self) -> list[PortfolioRanking]:

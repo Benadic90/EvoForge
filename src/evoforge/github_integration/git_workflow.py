@@ -2,9 +2,9 @@ import os
 import shutil
 import subprocess
 import tempfile
-import uuid
+from datetime import UTC, datetime
+
 import structlog
-from datetime import datetime, UTC
 
 from evoforge.github_integration.client import GitHubClient
 from evoforge.github_integration.pull_request import PullRequestManager
@@ -35,6 +35,10 @@ class AutonomousGitWorkflow:
         pushes to GitHub, and creates a real Pull Request.
         """
         token = self.client.token
+        if solution_summary == "NO_CHANGES_REQUIRED" or (not solution_summary and not file_changes):
+            logger.info("no_changes_required_skipping_git_push", repo=repo_full_name, task_id=task_id)
+            return "NO_CHANGES_REQUIRED"
+
         if not token:
             logger.warning("git_publish_skipped_no_token", repo=repo_full_name, task_id=task_id)
             return None
@@ -67,6 +71,10 @@ class AutonomousGitWorkflow:
 
             # 4. Apply file changes or create patch documentation
             applied_changes = []
+            if solution_summary == "NO_CHANGES_REQUIRED":
+                logger.info("no_changes_required_skipping_git_push", repo=repo_full_name, task_id=task_id)
+                return "NO_CHANGES_REQUIRED"
+
             if file_changes:
                 for file_path, content in file_changes.items():
                     full_path = os.path.join(temp_dir, file_path)
@@ -74,19 +82,27 @@ class AutonomousGitWorkflow:
                     with open(full_path, "w", encoding="utf-8") as f:
                         f.write(content)
                     applied_changes.append(file_path)
-            else:
-                # If LLM generated text solution/patch, record it in EVOLVE_TASK_<ID>.md or updates
+            elif solution_summary and solution_summary.strip():
+                # If LLM generated text solution/patch, record it in EVOLVE_TASK_<ID>.md
                 doc_path = os.path.join(temp_dir, f".evoforge_task_{clean_task_id}.md")
                 with open(doc_path, "w", encoding="utf-8") as f:
-                    f.write(f"# EvoForge Autonomous Resolution\n\n")
+                    f.write("# EvoForge Autonomous Resolution\n\n")
                     f.write(f"**Task:** {task_title}\n\n")
                     f.write(f"**Description:**\n{task_description}\n\n")
                     f.write(f"**Autonomous Solution:**\n\n{solution_summary}\n\n")
                     f.write(f"Generated on: {datetime.now(UTC).isoformat()}\n")
                 applied_changes.append(f".evoforge_task_{clean_task_id}.md")
+            else:
+                logger.info("empty_solution_skipping_git_push", repo=repo_full_name, task_id=task_id)
+                return "NO_CHANGES_REQUIRED"
 
             # 5. Stage & commit
             subprocess.run(["git", "add", "."], cwd=temp_dir, check=False)
+            status_res = subprocess.run(["git", "status", "--porcelain"], cwd=temp_dir, capture_output=True, text=True, check=False)
+            if not status_res.stdout.strip():
+                logger.info("working_tree_clean_skipping_commit", repo=repo_full_name)
+                return "NO_CHANGES_REQUIRED"
+
             commit_msg = f"feat(evoforge): {task_title}\n\nAutomated implementation by EvoForge Developer Agent for task {task_id}."
             subprocess.run(["git", "commit", "-m", commit_msg], cwd=temp_dir, check=False)
 

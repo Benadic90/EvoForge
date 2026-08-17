@@ -99,28 +99,14 @@ class SchedulerEngine:
 
         enqueued_count = 0
         for task_id in plan.execution_order:
-            import json
 
-            from evoforge.portfolio.models import PortfolioTask
 
             rows = self.db.fetchall("SELECT * FROM portfolio_tasks WHERE task_id = ?", (task_id,))
             if not rows:
                 continue
 
             row = dict(rows[0])
-            ptask = PortfolioTask(
-                task_id=row["task_id"],
-                project_id=row["project_id"],
-                title=row["title"],
-                description=row["description"],
-                source=row["source"],
-                source_id=row["source_id"],
-                priority=row["priority"],
-                risk=row["risk"],
-                dependencies=json.loads(row["dependencies"]) if row["dependencies"] else [],
-                required_capabilities=json.loads(row["required_capabilities"]) if row["required_capabilities"] else [],
-                status=row["status"],
-            )
+            ptask = self.priority_engine._row_to_task(row)
 
             req = PortfolioTaskRequirementsBuilder.build(ptask)
             
@@ -161,10 +147,86 @@ class SchedulerEngine:
 
         logger.info("portfolio_tasks_enqueued", count=enqueued_count)
 
+    def execute_pending_workflows(self):
+        """Processes pending workflows using the embedded OrchestratorEngine."""
+        from evoforge.agents.factory import build_agent_registry
+        from evoforge.github_integration.git_workflow import AutonomousGitWorkflow
+        from evoforge.memory.manager import MemoryManager
+        from evoforge.model_router.executors import create_default_executor_registry
+        from evoforge.model_router.routing import ExecutorRouter
+        from evoforge.orchestrator.engine import OrchestratorEngine
+        from evoforge.orchestrator.workflows import TaskPriority, WorkflowDefinition, WorkflowTask
+        from evoforge.utils.config import load_config
+        
+        cfg = load_config()
+        executor_registry = create_default_executor_registry(cfg, db=self.db)
+        router = ExecutorRouter(executor_registry)
+        agent_registry = build_agent_registry(None, None)
+        orchestrator = OrchestratorEngine(MemoryManager(self.db, ""), agent_registry, router)
+        
+        pending_rows = self.db.fetchall("SELECT * FROM workflows WHERE status = 'pending' ORDER BY created_at ASC LIMIT 5")
+        if not pending_rows:
+            return
+            
+        logger.info("scheduler_executing_pending_workflows", count=len(pending_rows))
+        for row in pending_rows:
+            wf_id = row["id"]
+            project_id = row["project"]
+            task_desc = row["task_description"] or "Automated Workflow Task"
+            
+            task_id = "ptask_" + wf_id.split("_ptask_")[-1] if "_ptask_" in wf_id else wf_id
+            
+            ptask_rows = self.db.fetchall("SELECT * FROM portfolio_tasks WHERE task_id = ?", (task_id,))
+            repo_name = "unknown/repo"
+            task_title = task_desc
+            if ptask_rows:
+                pt_row = dict(ptask_rows[0])
+                repo_name = pt_row.get("repository_full_name") or repo_name
+                task_title = pt_row.get("title") or task_title
+                
+            wtask = WorkflowTask(
+                id=task_id,
+                name=task_title,
+                description=task_desc,
+                priority=TaskPriority.MEDIUM,
+                agent_type="developer",
+            )
+            
+            wdef = WorkflowDefinition(
+                id=wf_id,
+                repo_name=repo_name,
+                tasks=[wtask],
+                dry_run=False
+            )
+            
+            try:
+                self.db.execute("UPDATE workflows SET status = 'running' WHERE id = ?", (wf_id,))
+                self.db.execute("UPDATE portfolio_tasks SET status = 'RUNNING' WHERE task_id = ?", (task_id,))
+                
+                orchestrator.execute_workflow(wdef)
+                
+                self.db.execute("UPDATE workflows SET status = 'completed' WHERE id = ?", (wf_id,))
+                self.db.execute("UPDATE portfolio_tasks SET status = 'COMPLETED' WHERE task_id = ?", (task_id,))
+                
+                # Publish Git PR if changes produced
+                git_flow = AutonomousGitWorkflow(db=self.db)
+                solution = wtask.context.get("result", task_desc)
+                pr_url = git_flow.publish_task_solution(
+                    repo_full_name=repo_name,
+                    task_id=task_id,
+                    task_title=task_title,
+                    task_description=task_desc,
+                    solution_summary=solution,
+                )
+                if pr_url:
+                    logger.info("scheduler_pr_published", url=pr_url)
+            except Exception as e:
+                logger.error("scheduler_workflow_execution_failed", workflow_id=wf_id, error=str(e))
+                self.db.execute("UPDATE workflows SET status = 'failed' WHERE id = ?", (wf_id,))
+                self.db.execute("UPDATE portfolio_tasks SET status = 'FAILED' WHERE task_id = ?", (task_id,))
+
     def trigger_research(self):
         if self.learning and hasattr(self.learning, 'run_scheduled_research'):
-            # The learning system handles creating jobs. We may need to adapt it to create workflows instead.
-            # For now, just trigger it to queue research jobs.
             self.learning.run_scheduled_research()
 
     def run_once(self):
@@ -179,6 +241,7 @@ class SchedulerEngine:
 
         try:
             self.enqueue_portfolio_tasks()
+            self.execute_pending_workflows()
             self.trigger_research()
             
             self._update_state(status="RUNNING", last_success=datetime.now(UTC).isoformat())

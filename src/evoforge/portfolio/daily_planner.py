@@ -34,14 +34,25 @@ class DailyPlanner:
         # Fetch top project rankings
         project_query = "SELECT * FROM portfolio_rankings WHERE item_type = 'project' ORDER BY rank ASC"
         project_rows = self.db.fetchall(project_query)
-        top_projects = [row["item_id"] for row in project_rows][:3]  # Consider top 3 projects for the day
+        top_projects = [row["item_id"] for row in project_rows][:3]
+        if not top_projects:
+            # Fallback to active managed projects from registry
+            top_projects = [p.project_id for p in self.registry.list() if p.status in ("MANAGED", "ACTIVE")]
         
         selected_tasks = []
         execution_order = []
         reasons = []
         
+        if not top_projects:
+            reasons.append("No active or managed projects registered in portfolio.")
+
         task_query = "SELECT * FROM portfolio_rankings WHERE item_type = 'task' ORDER BY rank ASC"
         task_rows = self.db.fetchall(task_query)
+        if not task_rows:
+            # If rankings haven't run, check uncompleted tasks directly
+            task_rows = [{"item_id": r["task_id"], "rank": idx + 1} for idx, r in enumerate(self.db.fetchall("SELECT task_id FROM portfolio_tasks WHERE status NOT IN ('COMPLETED', 'CANCELLED') ORDER BY priority DESC LIMIT ?", (self.max_tasks * 2,)))]
+            if not task_rows:
+                reasons.append("Backlog is empty; no uncompleted tasks found.")
         
         for row in task_rows:
             if len(selected_tasks) >= self.max_tasks:
@@ -53,6 +64,7 @@ class DailyPlanner:
                 continue
                 
             if task.project_id not in top_projects:
+                reasons.append(f"Skipped {task_id}: Project {task.project_id} is not in top priority projects.")
                 continue
                 
             if self._has_unmet_dependencies(task.dependencies):

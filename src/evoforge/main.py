@@ -1124,10 +1124,16 @@ def run_scheduler(interval: int = 3600):
     scheduler.start(interval_seconds=interval)
 
 @app.command("worker")
-def run_worker(type: str = typer.Option("cloud", help="Worker type: cloud or laptop"),
-               worker_id: str = typer.Option(None, help="Unique worker ID"),
-               control_plane: str = typer.Option("http://127.0.0.1:8000", help="Control Plane URL")):
-    """Run a headless worker node."""
+def run_worker(
+    type: str = typer.Option("cloud", help="Worker type: 'cloud' or 'laptop'"),
+    worker_id: str = typer.Option(None, help="Unique worker ID (auto-generated if omitted)"),
+    control_plane: str = typer.Option(
+        "http://127.0.0.1:8000", 
+        help="Control Plane URL (Local: http://127.0.0.1:8000 | Cloud: https://evoforge.onrender.com)"
+    ),
+    token: str = typer.Option(None, help="Worker authentication token (optional; defaults to WORKER_SECRET_TOKEN env)")
+):
+    """Run a headless distributed worker node."""
     import uuid
 
     from evoforge.agents.factory import build_agent_registry
@@ -1142,7 +1148,7 @@ def run_worker(type: str = typer.Option("cloud", help="Worker type: cloud or lap
     if not worker_id:
         worker_id = f"worker-{uuid.uuid4().hex[:8]}"
         
-    token = _control_plane_token()
+    auth_token = token or _control_plane_token()
     
     cfg = load_config()
     db = Database(cfg.database.sqlite_path)
@@ -1154,9 +1160,9 @@ def run_worker(type: str = typer.Option("cloud", help="Worker type: cloud or lap
     orchestrator = OrchestratorEngine(MemoryManager(db, ""), agent_registry, router)
     
     if type.lower() == "laptop":
-        node = LaptopWorkerNode(orchestrator, control_plane, worker_id, token)
+        node = LaptopWorkerNode(orchestrator, control_plane, worker_id, auth_token)
     else:
-        node = CloudWorkerNode(orchestrator, control_plane, worker_id, token)
+        node = CloudWorkerNode(orchestrator, control_plane, worker_id, auth_token)
         
     import signal
     import sys

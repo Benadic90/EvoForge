@@ -24,8 +24,7 @@ RUN uv sync --frozen
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app/src
 ENV EVOFORGE_DATA_DIR=/app/data
-ENV EVOFORGE_ALLOW_DEFAULT_DEV_TOKEN=1
-ENV WORKER_SECRET_TOKEN=default-dev-token
+# Authentication tokens MUST be provided at runtime via Render environment variables.
 
 # Ensure data directory exists
 RUN mkdir -p /app/data
