@@ -117,6 +117,28 @@ fun HomeScreen(systemViewModel: SystemViewModel) {
             statusColor = if (isOnline) StatusInfo else TextTertiaryDark
         )
 
+        val gitHubStatus by systemViewModel.gitHubStatus.collectAsState()
+        if (isOnline && gitHubStatus?.configured == false) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp),
+                color = StatusWarning.copy(alpha = 0.12f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, StatusWarning.copy(alpha = 0.4f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "⚠️ GitHub Token Missing: Add your token in Settings or Render to push commits & open PRs.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = StatusWarning
+                    )
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         var isTriggering by remember { mutableStateOf(false) }
