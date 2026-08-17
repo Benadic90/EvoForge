@@ -90,7 +90,7 @@ export default function EventStream({ realTimeState }) {
                 }`
               }}>
                 <div style={{ width: '80px', flexShrink: 0, fontSize: '12px', color: 'var(--text-muted)', paddingTop: '2px' }}>
-                  {new Date(event.timestamp).toLocaleTimeString()}
+                  {new Date(event.created_at || event.timestamp || Date.now()).toLocaleTimeString()}
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>

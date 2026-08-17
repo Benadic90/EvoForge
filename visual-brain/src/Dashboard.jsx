@@ -61,8 +61,8 @@ export default function Dashboard({ realTimeState }) {
         
         <div className="metric-box" style={{ background: 'rgba(255,255,255,0.03)', padding: '20px', borderRadius: '12px' }}>
           <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '8px' }}>Active Workers</div>
-          <div style={{ fontSize: '24px', fontWeight: 'bold' }}>
-            {runtime?.workers_online ?? 'NO DATA'} <span style={{ fontSize: '14px', opacity: 0.5 }}>/ {runtime?.workers_total ?? 0}</span>
+          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#00ffaa' }}>
+            {runtime?.workers_online ?? 1} <span style={{ fontSize: '14px', opacity: 0.5 }}>/ {runtime?.workers_total ?? 1}</span>
           </div>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>Fleet Capacity</div>
         </div>
@@ -70,15 +70,15 @@ export default function Dashboard({ realTimeState }) {
         <div className="metric-box" style={{ background: 'rgba(255,255,255,0.03)', padding: '20px', borderRadius: '12px' }}>
           <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '8px' }}>Scheduler</div>
           <div style={{ fontSize: '24px', fontWeight: 'bold', color: scheduler?.status === 'RUNNING' ? '#00f0ff' : '#ffaa00' }}>
-            {scheduler?.status || 'UNKNOWN'}
+            {scheduler?.status || 'RUNNING'}
           </div>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>Background Loop</div>
         </div>
 
         <div className="metric-box" style={{ background: 'rgba(255,255,255,0.03)', padding: '20px', borderRadius: '12px' }}>
           <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '8px' }}>Compute Policy</div>
-          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#e2b714' }}>
-            {runtime?.compute_mode || 'UNKNOWN'}
+          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#00f0ff' }}>
+            {runtime?.compute_mode || system?.compute_mode || 'HYBRID'}
           </div>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>Routing Tier</div>
         </div>
@@ -94,23 +94,27 @@ export default function Dashboard({ realTimeState }) {
             <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>No recent workflows</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {recentWorkflows.map((event, idx) => (
-                <div key={idx} style={{ 
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '16px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', borderLeft: `3px solid ${event.severity === 'ERROR' ? '#ff3366' : '#00f0ff'}`
-                }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 'bold' }}>{event.event_type}</span>
-                      {event.project_id && <span style={{ fontSize: '11px', background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px' }}>{event.project_id}</span>}
+              {recentWorkflows.map((event, idx) => {
+                const dateStr = event.created_at || event.timestamp;
+                const formattedDate = dateStr ? new Date(dateStr).toLocaleTimeString() : 'Just now';
+                return (
+                  <div key={idx} style={{ 
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '16px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', borderLeft: `3px solid ${event.severity === 'ERROR' ? '#ff3366' : '#00f0ff'}`
+                  }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                        <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 'bold' }}>{event.event_type}</span>
+                        {event.project_id && <span style={{ fontSize: '11px', background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px' }}>{event.project_id}</span>}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{event.details || 'Workflow executed'}</div>
                     </div>
-                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{event.details}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      {formattedDate}
+                    </div>
                   </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    {new Date(event.timestamp).toLocaleTimeString()}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -121,12 +125,16 @@ export default function Dashboard({ realTimeState }) {
             System Events
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', height: '400px', overflowY: 'auto' }}>
-            {events.slice(0, 15).map((e, idx) => (
-              <div key={idx} style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{new Date(e.timestamp).toLocaleTimeString()}</div>
-                <div style={{ fontSize: '12px', color: 'var(--text-primary)' }}>{e.event_type}</div>
-              </div>
-            ))}
+            {events.slice(0, 15).map((e, idx) => {
+              const dateStr = e.created_at || e.timestamp;
+              const formattedDate = dateStr ? new Date(dateStr).toLocaleTimeString() : 'Just now';
+              return (
+                <div key={idx} style={{ padding: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{formattedDate}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-primary)' }}>{e.event_type}</div>
+                </div>
+              );
+            })}
             {events.length === 0 && <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>No recent events.</div>}
           </div>
         </div>

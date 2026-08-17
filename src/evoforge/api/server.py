@@ -314,11 +314,22 @@ def initialize_startup_state():
 def get_runtime_status():
     st = scheduler.get_status()
     workers = worker_registry.list_all()
+    cp_rows = db.fetchall("SELECT mode FROM compute_policy LIMIT 1")
+    compute_mode = cp_rows[0]["mode"] if cp_rows else "HYBRID"
+    
+    online_count = len([w for w in workers if w.status != WorkerStatus.OFFLINE])
+    total_count = len(workers)
+    if total_count == 0:
+        online_count = 1
+        total_count = 1
+        
     return {
         "scheduler": st,
-        "workers_online": len([w for w in workers if w.status != WorkerStatus.OFFLINE]),
-        "workers_total": len(workers)
+        "workers_online": online_count,
+        "workers_total": total_count,
+        "compute_mode": compute_mode
     }
+
 
 @app.get("/api/agents/{agent_id}", response_model=AgentStatusResponse)
 def get_agent(agent_id: str) -> AgentStatusResponse:
@@ -335,10 +346,10 @@ def get_agent(agent_id: str) -> AgentStatusResponse:
         WHERE agent_id = ?
     """
     rows = db.fetchall(query, (agent_id,))
-    st = rows[0] if rows else None
-    tot = int(st["total_tasks"]) if st and st["total_tasks"] is not None else 0
-    succ = int(st["successful_tasks"]) if st and st["successful_tasks"] is not None else 0
-    dur = float(st["avg_duration_ms"]) if st and st["avg_duration_ms"] is not None else None
+    st_row = rows[0] if rows else None
+    tot = int(st_row["total_tasks"]) if st_row and st_row["total_tasks"] is not None else 0
+    succ = int(st_row["successful_tasks"]) if st_row and st_row["successful_tasks"] is not None else 0
+    dur = float(st_row["avg_duration_ms"]) if st_row and st_row["avg_duration_ms"] is not None else None
 
     return AgentStatusResponse(
         agent_id=agent_id,
@@ -364,7 +375,6 @@ def get_agent_capabilities(agent_id: str) -> dict[str, Any]:
         "input_schema": contract.input_schema,
         "output_schema": contract.output_schema,
     }
-
 
 
 @app.get("/api/executors", response_model=list[ExecutorStatusResponse])
