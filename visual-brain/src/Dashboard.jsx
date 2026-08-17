@@ -23,6 +23,31 @@ export default function Dashboard({ realTimeState }) {
         </div>
       </div>
 
+      {realTimeState.isOffline && (
+        <div style={{
+          background: 'rgba(255, 68, 68, 0.1)',
+          border: '1px solid rgba(255, 68, 68, 0.3)',
+          borderRadius: '12px',
+          padding: '16px 20px',
+          marginBottom: '24px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div>
+            <div style={{ color: '#ff4444', fontWeight: 'bold', fontSize: '15px', marginBottom: '4px' }}>
+              Control Plane Offline or Unreachable
+            </div>
+            <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
+              Make sure your backend is running and configured with the right URL in Settings.
+            </div>
+          </div>
+          <div style={{ color: 'var(--accent-cyan)', fontSize: '13px', fontWeight: 'bold' }}>
+            Go to Settings (⚙) to configure URL & Token →
+          </div>
+        </div>
+      )}
+
       <GlobalCommandPanel realTimeState={realTimeState} />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '32px' }}>

@@ -124,7 +124,9 @@ class ApiClient {
   
   // Settings
   getComputePolicy() { return this._fetch('/settings/compute'); }
-  updateComputePolicy(policy) { return this._fetch('/settings/compute', { method: 'POST', body: JSON.stringify(policy) }); }
+  updateComputePolicy(policy) { return this._fetch('/settings/compute', { method: 'PUT', body: JSON.stringify(policy) }); }
+  updateGitHubToken(token) { return this._fetch('/github/token', { method: 'PUT', body: JSON.stringify({ token }) }); }
+  updateLLMKey(provider, apiKey) { return this._fetch('/llm/keys', { method: 'PUT', body: JSON.stringify({ provider, api_key: apiKey }) }); }
 }
 
 export const api = new ApiClient();

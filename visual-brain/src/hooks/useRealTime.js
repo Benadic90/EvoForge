@@ -33,10 +33,11 @@ export function useRealTime(pollingIntervalMs = 3000) {
       });
 
       setEvents(evRes || []);
-      setLoading(false);
     } catch (err) {
       console.warn("RealTime polling failed, backend may be offline:", err);
       setStatus(prev => ({ ...prev, isOffline: true }));
+    } finally {
+      setLoading(false);
     }
   };
 

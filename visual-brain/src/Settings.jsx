@@ -1,7 +1,17 @@
-import { Sliders, Shield, Zap, Key, Save, RotateCcw, Cpu } from 'lucide-react';
+import { Sliders, Shield, Zap, Key, Save, RotateCcw, Cpu, Link, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { api } from './api/client';
 
 export default function Settings() {
+  const [controlPlaneUrl, setControlPlaneUrl] = useState(() => {
+    return localStorage.getItem('evoforge_api_base') || import.meta.env.VITE_API_BASE || 'https://evoforge.onrender.com/api';
+  });
+  const [bearerToken, setBearerToken] = useState(() => {
+    return localStorage.getItem('evoforge_auth_token') || 'default-dev-token';
+  });
+  const [connectionStatus, setConnectionStatus] = useState(null);
+  const [testingConnection, setTestingConnection] = useState(false);
+
   const [computePolicy, setComputePolicy] = useState({
     mode: 'HYBRID',
     allow_local: true,
@@ -13,23 +23,42 @@ export default function Settings() {
 
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    fetch('/api/settings/compute')
-      .then(res => res.json())
-      .then(data => setComputePolicy(data))
+  const loadComputePolicy = () => {
+    api.getComputePolicy()
+      .then(data => {
+        if (data) setComputePolicy(data);
+      })
       .catch(err => console.error('Failed to load compute policy:', err));
+  };
+
+  useEffect(() => {
+    loadComputePolicy();
   }, []);
+
+  const saveConnection = async () => {
+    setTestingConnection(true);
+    setConnectionStatus(null);
+    try {
+      api.setBaseUrl(controlPlaneUrl.trim());
+      api.setToken(bearerToken.trim());
+      
+      const status = await api.getSystemStatus();
+      if (status) {
+        setConnectionStatus({ success: true, message: `Connected! EvoForge is ${status.system_state || 'ONLINE'}` });
+        loadComputePolicy();
+      }
+    } catch (err) {
+      setConnectionStatus({ success: false, message: err.message || 'Failed to connect to Control Plane.' });
+    } finally {
+      setTestingConnection(false);
+    }
+  };
 
   const saveSettings = async () => {
     setSaving(true);
     try {
-      const res = await fetch('/api/settings/compute', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(computePolicy)
-      });
-      const updated = await res.json();
-      setComputePolicy(updated);
+      const updated = await api.updateComputePolicy(computePolicy);
+      if (updated) setComputePolicy(updated);
     } catch (err) {
       console.error('Failed to save settings:', err);
     }
@@ -53,6 +82,77 @@ export default function Settings() {
          {/* Column 1 */}
          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             
+            {/* Control Plane Connection */}
+            <div className="glass-panel" style={{ padding: '24px', border: '1px solid rgba(0, 240, 255, 0.2)' }}>
+               <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: 0, marginBottom: '16px', color: 'var(--text-main)', fontSize: '15px' }}>
+                 <Link size={18} color="var(--accent-cyan)"/> Control Plane Connection
+               </h3>
+               <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: 0, marginBottom: '16px' }}>
+                 Connect Visual Brain to your remote Render or local backend instance.
+               </p>
+               
+               <div className="setting-row" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '8px' }}>
+                  <div className="setting-name">Control Plane URL</div>
+                  <input 
+                    type="text" 
+                    className="setting-input" 
+                    value={controlPlaneUrl}
+                    onChange={(e) => setControlPlaneUrl(e.target.value)}
+                    placeholder="https://evoforge.onrender.com/api" 
+                    style={{ width: '100%', padding: '8px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', color: '#fff' }} 
+                  />
+               </div>
+
+               <div className="setting-row" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '8px', borderBottom: 'none' }}>
+                  <div className="setting-name">Bearer Token</div>
+                  <input 
+                    type="password" 
+                    className="setting-input" 
+                    value={bearerToken}
+                    onChange={(e) => setBearerToken(e.target.value)}
+                    placeholder="default-dev-token" 
+                    style={{ width: '100%', padding: '8px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', color: '#fff' }} 
+                  />
+               </div>
+
+               {connectionStatus && (
+                 <div style={{ 
+                   marginTop: '12px', 
+                   padding: '10px 14px', 
+                   borderRadius: '6px', 
+                   display: 'flex', 
+                   alignItems: 'center', 
+                   gap: '8px',
+                   fontSize: '13px',
+                   background: connectionStatus.success ? 'rgba(0, 255, 170, 0.1)' : 'rgba(255, 68, 68, 0.1)',
+                   color: connectionStatus.success ? '#00ffaa' : '#ff4444',
+                   border: `1px solid ${connectionStatus.success ? 'rgba(0, 255, 170, 0.3)' : 'rgba(255, 68, 68, 0.3)'}`
+                 }}>
+                   {connectionStatus.success ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
+                   <span>{connectionStatus.message}</span>
+                 </div>
+               )}
+
+               <button 
+                 onClick={saveConnection} 
+                 disabled={testingConnection}
+                 style={{ 
+                   marginTop: '16px', 
+                   width: '100%', 
+                   padding: '10px', 
+                   borderRadius: '6px', 
+                   border: 'none', 
+                   background: 'var(--accent-cyan)', 
+                   color: '#000', 
+                   fontWeight: 'bold', 
+                   cursor: 'pointer',
+                   opacity: testingConnection ? 0.6 : 1
+                 }}
+               >
+                 {testingConnection ? 'Testing Connection...' : 'Save & Test Connection'}
+               </button>
+            </div>
+
             <div className="glass-panel" style={{ padding: '24px' }}>
                <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: 0, marginBottom: '20px', color: 'var(--text-main)', fontSize: '15px' }}><Cpu size={18} color="var(--accent-cyan)"/> Execution Mode (Compute)</h3>
                
@@ -123,18 +223,6 @@ export default function Settings() {
                   </div>
                   <input type="number" className="setting-input" defaultValue={5} min={1} max={20} style={{ width: '80px' }} />
                </div>
-               
-               <div className="setting-row" style={{ borderBottom: 'none', paddingBottom: 0 }}>
-                  <div className="setting-info">
-                     <div className="setting-name">Context Window (Tokens)</div>
-                     <div className="setting-desc">Maximum context size passed to the agents.</div>
-                  </div>
-                  <select className="setting-select">
-                     <option>128,000</option>
-                     <option>200,000</option>
-                     <option>1,000,000</option>
-                  </select>
-               </div>
             </div>
 
          </div>
@@ -143,7 +231,7 @@ export default function Settings() {
          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             
             <div className="glass-panel" style={{ padding: '24px' }}>
-               <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: 0, marginBottom: '20px', color: 'var(--text-main)', fontSize: '15px' }}><Shield size={18} color="var(--success)"/> Security & Policies</h3>
+               <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: 0, marginBottom: '20px', color: 'var(--success)' }}><Shield size={18} color="var(--success)"/> Security & Policies</h3>
                
                <div className="setting-row">
                   <div className="setting-info">
@@ -169,7 +257,7 @@ export default function Settings() {
             </div>
 
             <div className="glass-panel" style={{ padding: '24px' }}>
-               <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: 0, marginBottom: '20px', color: 'var(--text-main)', fontSize: '15px' }}><Key size={18} color="var(--accent-purple)"/> API Credentials</h3>
+               <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: 0, marginBottom: '20px', color: 'var(--text-main)', fontSize: '15px' }}><Key size={18} color="var(--accent-purple)"/> Remote API Credentials</h3>
                
                <div className="setting-row">
                   <div className="setting-info">
