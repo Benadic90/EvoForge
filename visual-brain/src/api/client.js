@@ -122,11 +122,19 @@ class ApiClient {
   // Knowledge Graph
   getKnowledgeGraph() { return this._fetch('/graph/knowledge'); }
   
-  // Settings
+  // Settings & Operations
   getComputePolicy() { return this._fetch('/settings/compute'); }
   updateComputePolicy(policy) { return this._fetch('/settings/compute', { method: 'PUT', body: JSON.stringify(policy) }); }
   updateGitHubToken(token) { return this._fetch('/github/token', { method: 'PUT', body: JSON.stringify({ token }) }); }
   updateLLMKey(provider, apiKey) { return this._fetch('/llm/keys', { method: 'PUT', body: JSON.stringify({ provider, api_key: apiKey }) }); }
+
+  // Control Plane Global Operations
+  scanPortfolio() { return this._fetch('/portfolio/scan', { method: 'POST' }); }
+  generateDailyPlan() { return this._fetch('/portfolio/daily-plan', { method: 'POST' }); }
+  resumeRuntime() { return this._fetch('/scheduler/resume', { method: 'POST' }); }
+  pauseRuntime() { return this._fetch('/scheduler/pause', { method: 'POST' }); }
+  forceRunDaily() { return this._fetch('/force-run-daily'); }
+  triggerEvolution() { return this._fetch('/learning/evolve', { method: 'POST' }); }
 }
 
 export const api = new ApiClient();

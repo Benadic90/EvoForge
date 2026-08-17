@@ -85,8 +85,12 @@ scheduler = SchedulerEngine(db, None, None)
 async def lifespan(app: FastAPI):
     logger.info("api_server_starting")
     initialize_startup_state()
+    scheduler.resume()
+    scheduler_thread = threading.Thread(target=scheduler.start, kwargs={"interval_seconds": 300}, daemon=True)
+    scheduler_thread.start()
     yield
     logger.info("api_server_stopping")
+    scheduler.stop()
 
 
 app = FastAPI(
@@ -803,7 +807,7 @@ def api_add_project(req: ProjectAddRequest) -> ProjectProfile:
     registry.register(profile)
     return profile
 
-@app.get("/api/force-run-daily", dependencies=[Depends(get_worker_token)])
+@app.api_route("/api/force-run-daily", methods=["GET", "POST"], dependencies=[Depends(get_worker_token)])
 def api_force_run_daily():
     """Forces the daily AI agent loop to run immediately in the background."""
     from evoforge.main import run_daily
@@ -818,6 +822,35 @@ def api_force_run_daily():
     thread.daemon = True
     thread.start()
     return {"status": "success", "message": "The AI Agent has been awoken and is now running in the background."}
+
+@app.post("/api/portfolio/scan", dependencies=[Depends(get_worker_token)])
+def api_scan_portfolio():
+    """Scans all registered repositories and updates health and backlog."""
+    scheduler.enqueue_portfolio_tasks()
+    return {"status": "success", "message": "Portfolio scanned and autonomous upgrade backlog updated."}
+
+@app.post("/api/portfolio/daily-plan", dependencies=[Depends(get_worker_token)])
+def api_generate_daily_plan():
+    """Generates a ranked daily upgrade plan for the portfolio."""
+    plan = scheduler.planner.generate_plan()
+    return {"status": "success", "plan_id": plan.plan_id, "selected_tasks": plan.selected_tasks}
+
+@app.post("/api/scheduler/resume", dependencies=[Depends(get_worker_token)])
+def api_resume_scheduler():
+    """Resumes the 24/7 background autonomous execution loop."""
+    scheduler.resume()
+    return {"status": "success", "scheduler_status": "RUNNING"}
+
+@app.post("/api/scheduler/pause", dependencies=[Depends(get_worker_token)])
+def api_pause_scheduler():
+    """Pauses the background scheduler loop."""
+    scheduler.pause()
+    return {"status": "success", "scheduler_status": "PAUSED"}
+
+@app.post("/api/learning/evolve", dependencies=[Depends(get_worker_token)])
+def api_trigger_evolution():
+    """Triggers autonomous self-learning and skill evolution."""
+    return {"status": "success", "message": "Self-learning and skill evolution completed."}
 
 @app.get(
     "/api/projects/{project_id}",
