@@ -567,6 +567,8 @@ def create_default_executor_registry(config: Any = None, db: Database | None = N
             AgentCapability.CODING,
             AgentCapability.REFACTORING,
             AgentCapability.MULTI_FILE_EDITING,
+            AgentCapability.TERMINAL,
+            AgentCapability.PLANNING,
         ],
     )
 
@@ -578,6 +580,8 @@ def create_default_executor_registry(config: Any = None, db: Database | None = N
         AgentCapability.REFACTORING,
         AgentCapability.MULTI_FILE_EDITING,
         AgentCapability.REPO_NAVIGATION,
+        AgentCapability.TERMINAL,
+        AgentCapability.PLANNING,
     ])
 
     # NVIDIA
@@ -591,6 +595,8 @@ def create_default_executor_registry(config: Any = None, db: Database | None = N
             AgentCapability.REASONING,
             AgentCapability.REFACTORING,
             AgentCapability.MULTI_FILE_EDITING,
+            AgentCapability.TERMINAL,
+            AgentCapability.PLANNING,
         ],
     )
 

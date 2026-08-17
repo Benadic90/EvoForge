@@ -27,6 +27,7 @@ def _control_plane_token() -> str:
         "WORKER_SECRET_TOKEN is required. Set EVOFORGE_ALLOW_DEFAULT_DEV_TOKEN=1 only for local development."
     )
 
+
 @app.command()
 def run_daily():
     """
@@ -57,11 +58,13 @@ def run_daily():
     
     console.print("[cyan]Starting daily portfolio scan...[/cyan]")
     for p in registry.list():
-        if p.status == "MANAGED":
+        if p.status in ("MANAGED", "ACTIVE"):
             console.print(f"Scanning {p.repository_full_name}...")
-            report, raw_items = scanner.scan_project(p.project_id, force_rescan=True)
-            if raw_items:
-                priority_engine.generate_backlog(p.project_id, raw_items)
+            res = scanner.scan_project(p.project_id, force_rescan=True)
+            if res:
+                report, raw_items = res
+                if raw_items:
+                    priority_engine.generate_backlog(p.project_id, raw_items)
                 
     console.print("[cyan]Ranking portfolio items...[/cyan]")
     priority_engine.rank_projects()
@@ -82,7 +85,6 @@ def run_daily():
     orchestrator = OrchestratorEngine(MemoryManager(db, ""), agent_registry, router)
     
     for task_id in plan.execution_order:
-        # We need to fetch the task
         query = "SELECT * FROM portfolio_tasks WHERE task_id = ?"
         rows = db.fetchall(query, (task_id,))
         if not rows:
@@ -741,14 +743,16 @@ def portfolio_scan():
     registry = ProjectRegistry(db)
     gh_client = GitHubClient()
     scanner = ProjectScanner(db, gh_client, registry)
-    
     console.print("[cyan]Starting portfolio scan...[/cyan]")
     for p in registry.list():
         if p.status == "ACTIVE":
             console.print(f"Scanning {p.repository_full_name}...")
-            report = scanner.scan_project(p.project_id)
-            if report:
-                console.print(f"  Health: {report.overall_health}")
+            res = scanner.scan_project(p.project_id)
+            if res:
+                report, raw_items = res
+                if report:
+                    console.print(f"  Health: {report.overall_health}")
+                    console.print(f"  Discovered items: {len(raw_items) if raw_items else 0}")
     console.print("[green]Portfolio scan completed.[/green]")
 
 
