@@ -1,0 +1,128 @@
+import os
+import shutil
+import subprocess
+import tempfile
+import uuid
+import structlog
+from datetime import datetime, UTC
+
+from evoforge.github_integration.client import GitHubClient
+from evoforge.github_integration.pull_request import PullRequestManager
+from evoforge.memory.database import Database
+
+logger = structlog.get_logger(__name__)
+
+
+class AutonomousGitWorkflow:
+    """Manages the full Git lifecycle: cloning, branching, committing, pushing, and opening GitHub PRs."""
+
+    def __init__(self, db: Database | None = None, token: str | None = None):
+        self.db = db
+        self.client = GitHubClient(token=token, db=db)
+        self.pr_manager = PullRequestManager(self.client)
+
+    def publish_task_solution(
+        self,
+        repo_full_name: str,
+        task_id: str,
+        task_title: str,
+        task_description: str,
+        solution_summary: str,
+        file_changes: dict[str, str] | None = None,
+    ) -> str | None:
+        """
+        Clones the repo, creates a branch, commits the generated code/patches,
+        pushes to GitHub, and creates a real Pull Request.
+        """
+        token = self.client.token
+        if not token:
+            logger.warning("git_publish_skipped_no_token", repo=repo_full_name, task_id=task_id)
+            return None
+
+        clean_task_id = task_id.replace("task_", "").replace("-", "")[:8]
+        branch_name = f"evoforge/patch-{clean_task_id}"
+        temp_dir = tempfile.mkdtemp(prefix="evoforge_git_")
+
+        try:
+            # 1. Clone repository with authenticated token
+            clone_url = f"https://x-access-token:{token}@github.com/{repo_full_name}.git"
+            logger.info("cloning_repository", repo=repo_full_name, branch=branch_name)
+
+            clone_res = subprocess.run(
+                ["git", "clone", "--depth", "1", clone_url, temp_dir],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            if clone_res.returncode != 0:
+                logger.error("git_clone_failed", error=clone_res.stderr)
+                return None
+
+            # 2. Configure Git user
+            subprocess.run(["git", "config", "user.name", "EvoForge Autonomous Agent"], cwd=temp_dir, check=False)
+            subprocess.run(["git", "config", "user.email", "agent@evoforge.ai"], cwd=temp_dir, check=False)
+
+            # 3. Create and switch to new branch
+            subprocess.run(["git", "checkout", "-b", branch_name], cwd=temp_dir, check=False)
+
+            # 4. Apply file changes or create patch documentation
+            applied_changes = []
+            if file_changes:
+                for file_path, content in file_changes.items():
+                    full_path = os.path.join(temp_dir, file_path)
+                    os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                    with open(full_path, "w", encoding="utf-8") as f:
+                        f.write(content)
+                    applied_changes.append(file_path)
+            else:
+                # If LLM generated text solution/patch, record it in EVOLVE_TASK_<ID>.md or updates
+                doc_path = os.path.join(temp_dir, f".evoforge_task_{clean_task_id}.md")
+                with open(doc_path, "w", encoding="utf-8") as f:
+                    f.write(f"# EvoForge Autonomous Resolution\n\n")
+                    f.write(f"**Task:** {task_title}\n\n")
+                    f.write(f"**Description:**\n{task_description}\n\n")
+                    f.write(f"**Autonomous Solution:**\n\n{solution_summary}\n\n")
+                    f.write(f"Generated on: {datetime.now(UTC).isoformat()}\n")
+                applied_changes.append(f".evoforge_task_{clean_task_id}.md")
+
+            # 5. Stage & commit
+            subprocess.run(["git", "add", "."], cwd=temp_dir, check=False)
+            commit_msg = f"feat(evoforge): {task_title}\n\nAutomated implementation by EvoForge Developer Agent for task {task_id}."
+            subprocess.run(["git", "commit", "-m", commit_msg], cwd=temp_dir, check=False)
+
+            # 6. Push to remote
+            logger.info("pushing_git_branch", branch=branch_name, repo=repo_full_name)
+            push_res = subprocess.run(
+                ["git", "push", "-u", "origin", branch_name],
+                cwd=temp_dir,
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            if push_res.returncode != 0:
+                logger.error("git_push_failed", error=push_res.stderr)
+                return None
+
+            # 7. Create GitHub Pull Request
+            pr_body = self.pr_manager.get_pr_template(
+                summary=f"Automated resolution for task `{task_title}`.",
+                motivation=task_description,
+                changes="\n".join([f"- Modified/Added `{ch}`" for ch in applied_changes]) + f"\n\n### Developer Agent Output\n```\n{solution_summary[:1000]}\n```",
+                tasks_completed={task_title: ("DeveloperAgent", "Completed")}
+            )
+
+            pr_url = self.pr_manager.create_pr(
+                repo_full_name=repo_full_name,
+                title=f"🤖 EvoForge: {task_title}",
+                body=pr_body,
+                head_branch=branch_name,
+                base_branch="main"
+            )
+            logger.info("autonomous_pr_published", repo=repo_full_name, pr_url=pr_url)
+            return pr_url
+
+        except Exception as e:
+            logger.error("git_workflow_failed", error=str(e))
+            return None
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)

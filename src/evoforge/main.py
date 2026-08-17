@@ -158,14 +158,33 @@ def run_daily():
             
             orchestrator.execute_workflow(wdef)
             
-            # Since execute_workflow is blocking for bounded execution, we can check state afterwards
+            # Mark task as completed
             db.execute("UPDATE portfolio_tasks SET status = 'COMPLETED' WHERE task_id = ?", (task_id,))
+            
+            # Publish Git branch and create Pull Request on GitHub
+            try:
+                from evoforge.github_integration.git_workflow import AutonomousGitWorkflow
+                git_flow = AutonomousGitWorkflow(db=db)
+                solution = wtask.context.get("result", ptask.description)
+                pr_url = git_flow.publish_task_solution(
+                    repo_full_name=repo_name,
+                    task_id=task_id,
+                    task_title=ptask.title,
+                    task_description=ptask.description,
+                    solution_summary=solution,
+                )
+                if pr_url:
+                    console.print(f"[bold green]🚀 Pull Request successfully created on GitHub: {pr_url}[/bold green]")
+            except Exception as git_err:
+                logger.warning("git_pr_publish_failed", error=str(git_err))
+                console.print(f"[yellow]Notice: Task completed locally, but GitHub publish skipped: {git_err}[/yellow]")
             
         except Exception as e:
             console.print(f"[red]Error executing {task_id}: {e}[/red]")
             db.execute("UPDATE portfolio_tasks SET status = 'FAILED' WHERE task_id = ?", (task_id,))
             
     logger.info("daily_run_completed")
+
 
 @app.command()
 def status():
