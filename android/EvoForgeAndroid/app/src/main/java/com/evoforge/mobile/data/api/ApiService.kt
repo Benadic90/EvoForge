@@ -34,6 +34,15 @@ interface ApiService {
     @GET("api/projects/{projectId}")
     suspend fun getProject(@Path("projectId") projectId: String): Response<ProjectResponse>
 
+    @GET("api/projects/{projectId}/health")
+    suspend fun getProjectHealth(@Path("projectId") projectId: String): Response<ProjectHealthReport>
+
+    @GET("api/projects/{projectId}/roadmap")
+    suspend fun getProjectRoadmap(@Path("projectId") projectId: String): Response<ProjectRoadmap>
+
+    @GET("api/projects/{projectId}/tasks")
+    suspend fun getProjectTasks(@Path("projectId") projectId: String, @Query("limit") limit: Int = 50, @Query("offset") offset: Int = 0): Response<List<PortfolioTask>>
+
     @PUT("api/github/token")
     suspend fun updateGitHubToken(@Body update: GitHubTokenUpdate): Response<Unit>
 

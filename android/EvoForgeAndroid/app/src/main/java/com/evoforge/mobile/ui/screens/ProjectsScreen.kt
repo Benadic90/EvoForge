@@ -25,7 +25,7 @@ import com.evoforge.mobile.data.model.ProjectResponse
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProjectsScreen(systemViewModel: SystemViewModel) {
+fun ProjectsScreen(systemViewModel: SystemViewModel, onNavigateToProject: (String) -> Unit) {
     val projects by systemViewModel.projects.collectAsState()
 
     var showAddDialog by remember { mutableStateOf(false) }
@@ -75,7 +75,9 @@ fun ProjectsScreen(systemViewModel: SystemViewModel) {
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(projects) { project ->
-                        ProjectRow(project)
+                        ProjectRow(project) { projectId ->
+                            onNavigateToProject(projectId)
+                        }
                     }
                 }
             }
@@ -118,7 +120,7 @@ fun ProjectsScreen(systemViewModel: SystemViewModel) {
 }
 
 @Composable
-fun ProjectRow(project: ProjectResponse) {
+fun ProjectRow(project: ProjectResponse, onClick: (String) -> Unit) {
     val healthColor = when (project.health.uppercase()) {
         "HEALTHY" -> StatusOnline
         "WARNING" -> StatusWarning
@@ -134,7 +136,7 @@ fun ProjectRow(project: ProjectResponse) {
         color = MaterialTheme.colorScheme.surface,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         onClick = { 
-            android.widget.Toast.makeText(context, "${project.name} details coming in Phase 10!", android.widget.Toast.LENGTH_SHORT).show()
+            onClick(project.project_id)
         }
     ) {
         Row(

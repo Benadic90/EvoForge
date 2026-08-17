@@ -19,7 +19,10 @@ import com.evoforge.mobile.core.auth.AuthManager
 import com.evoforge.mobile.ui.screens.HomeScreen
 import com.evoforge.mobile.ui.screens.ProjectsScreen
 import com.evoforge.mobile.ui.screens.SettingsScreen
+import com.evoforge.mobile.ui.screens.ProjectDetailsScreen
 import com.evoforge.mobile.viewmodel.SystemViewModel
+import com.evoforge.mobile.viewmodel.ProjectViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 data class NavItem(val route: String, val label: String, val icon: ImageVector)
 
@@ -82,8 +85,23 @@ fun EvoForgeNavGraph(systemViewModel: SystemViewModel, authManager: AuthManager)
             modifier = Modifier.padding(innerPadding)
         ) {
             composable("home") { HomeScreen(systemViewModel) }
-            composable("projects") { ProjectsScreen(systemViewModel) }
+            composable("projects") { 
+                ProjectsScreen(systemViewModel, onNavigateToProject = { projectId ->
+                    navController.navigate("project_details/$projectId")
+                }) 
+            }
             composable("settings") { SettingsScreen(systemViewModel, authManager) }
+            composable("project_details/{projectId}") { backStackEntry ->
+                val projectId = backStackEntry.arguments?.getString("projectId") ?: return@composable
+                val projectViewModel: ProjectViewModel = viewModel(
+                    factory = ProjectViewModel.Factory(authManager)
+                )
+                ProjectDetailsScreen(
+                    projectId = projectId,
+                    viewModel = projectViewModel,
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
         }
     }
 }

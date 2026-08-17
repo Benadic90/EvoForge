@@ -131,3 +131,88 @@ data class EventResponse(
     val details: String = "",
     val payload: Map<String, JsonElement> = emptyMap()
 )
+
+@Serializable
+data class PortfolioEvidence(
+    val evidence_id: String = "",
+    val project_id: String = "",
+    val task_id: String? = null,
+    val source: String = "",
+    val source_type: String = "",
+    val source_id: String? = null,
+    val source_url: String? = null,
+    val observation: String = "",
+    val severity: String = "UNKNOWN",
+    val timestamp: String = "",
+    val expires_at: String? = null,
+    val confidence: Double = 1.0,
+    val metadata: Map<String, JsonElement> = emptyMap()
+)
+
+@Serializable
+data class ProjectHealthReport(
+    val project_id: String = "",
+    val overall_health: String = "UNKNOWN",
+    val security_health: Double? = null,
+    val test_health: Double? = null,
+    val documentation_health: Double? = null,
+    val maintenance_health: Double? = null,
+    val activity_health: Double? = null,
+    val technical_debt: Double? = null,
+    val ci_health: Double? = null,
+    val roadmap_health: Double? = null,
+    val evidence: List<PortfolioEvidence> = emptyList(),
+    val warnings: List<String> = emptyList(),
+    val unknown_fields: List<String> = emptyList(),
+    val timestamp: String = ""
+)
+
+@Serializable
+data class Milestone(
+    val milestone_id: String = "",
+    val title: String = "",
+    val description: String = "",
+    val priority: String = "",
+    val status: String = "",
+    val dependencies: List<String> = emptyList(),
+    val evidence: List<String> = emptyList(),
+    val target_date: String? = null
+)
+
+@Serializable
+data class ProjectRoadmap(
+    val roadmap_id: String = "",
+    val project_id: String = "",
+    val version: String = "",
+    val vision: String = "",
+    val milestones: List<Milestone> = emptyList(),
+    val objectives: List<String> = emptyList(),
+    val dependencies: List<String> = emptyList(),
+    val status: String = "",
+    val created_at: String = "",
+    val updated_at: String = ""
+)
+
+@Serializable
+data class PortfolioTask(
+    val task_id: String = "",
+    val canonical_task_id: String? = null,
+    val project_id: String = "",
+    val repository_full_name: String? = null,
+    val title: String = "",
+    val description: String = "",
+    val source: String = "",
+    val source_type: String = "unknown",
+    val source_id: String = "",
+    val source_url: String? = null,
+    val priority: Double = 0.0,
+    val confidence: Double = 1.0,
+    val risk: String = "LOW",
+    val estimated_minutes: Int? = null,
+    val dependencies: List<String> = emptyList(),
+    val required_capabilities: List<String> = emptyList(),
+    val status: String = "DISCOVERED",
+    val created_at: String = "",
+    val updated_at: String = "",
+    val metadata: Map<String, JsonElement> = emptyMap()
+)

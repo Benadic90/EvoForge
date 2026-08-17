@@ -32,4 +32,69 @@ class EvoForgeRepository(private val apiService: ApiService) {
             emit(Result.failure(e))
         }
     }
+
+    fun getProjects() = flow {
+        try {
+            val response = apiService.getProjects()
+            if (response.isSuccessful && response.body() != null) {
+                emit(Result.success(response.body()!!))
+            } else {
+                emit(Result.failure(Exception("HTTP ${response.code()}")))
+            }
+        } catch (e: Exception) {
+            emit(Result.failure(e))
+        }
+    }
+
+    fun getProject(projectId: String) = flow {
+        try {
+            val response = apiService.getProject(projectId)
+            if (response.isSuccessful && response.body() != null) {
+                emit(Result.success(response.body()!!))
+            } else {
+                emit(Result.failure(Exception("HTTP ${response.code()}")))
+            }
+        } catch (e: Exception) {
+            emit(Result.failure(e))
+        }
+    }
+
+    fun getProjectHealth(projectId: String) = flow {
+        try {
+            val response = apiService.getProjectHealth(projectId)
+            if (response.isSuccessful && response.body() != null) {
+                emit(Result.success(response.body()!!))
+            } else {
+                emit(Result.failure(Exception("HTTP ${response.code()}")))
+            }
+        } catch (e: Exception) {
+            emit(Result.failure(e))
+        }
+    }
+
+    fun getProjectRoadmap(projectId: String) = flow {
+        try {
+            val response = apiService.getProjectRoadmap(projectId)
+            if (response.isSuccessful && response.body() != null) {
+                emit(Result.success(response.body()!!))
+            } else {
+                emit(Result.failure(Exception("HTTP ${response.code()}")))
+            }
+        } catch (e: Exception) {
+            emit(Result.failure(e))
+        }
+    }
+
+    fun getProjectTasks(projectId: String) = flow {
+        try {
+            val response = apiService.getProjectTasks(projectId)
+            if (response.isSuccessful && response.body() != null) {
+                emit(Result.success(response.body()!!))
+            } else {
+                emit(Result.failure(Exception("HTTP ${response.code()}")))
+            }
+        } catch (e: Exception) {
+            emit(Result.failure(e))
+        }
+    }
 }
