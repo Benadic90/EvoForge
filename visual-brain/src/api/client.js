@@ -1,18 +1,34 @@
-const configuredApiBase = import.meta.env.VITE_API_BASE || 'http://localhost:8000/api';
-const trimmedApiBase = configuredApiBase.replace(/\/+$/, '');
-const API_BASE = trimmedApiBase.endsWith('/api') ? trimmedApiBase : `${trimmedApiBase}/api`;
+
+function getApiBase() {
+  const custom = typeof window !== 'undefined' ? localStorage.getItem('evoforge_api_base') : null;
+  const raw = custom || import.meta.env.VITE_API_BASE || 'http://localhost:8000/api';
+  const trimmed = raw.replace(/\/+$/, '');
+  return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
+}
 
 class ApiClient {
   constructor() {
-    this.token = null;
+    this.token = typeof window !== 'undefined' ? localStorage.getItem('evoforge_auth_token') : null;
   }
 
   setToken(token) {
     this.token = token;
+    if (typeof window !== 'undefined') {
+      if (token) localStorage.setItem('evoforge_auth_token', token);
+      else localStorage.removeItem('evoforge_auth_token');
+    }
+  }
+
+  setBaseUrl(url) {
+    if (typeof window !== 'undefined') {
+      if (url) localStorage.setItem('evoforge_api_base', url);
+      else localStorage.removeItem('evoforge_api_base');
+    }
   }
 
   async _fetch(endpoint, options = {}) {
-    const url = `${API_BASE}${endpoint}`;
+    const base = getApiBase();
+    const url = `${base}${endpoint}`;
     const headers = {
       'Content-Type': 'application/json',
       ...options.headers,
@@ -20,6 +36,7 @@ class ApiClient {
 
     if (this.token) {
       headers['Authorization'] = `Bearer ${this.token}`;
+      headers['X-Worker-Token'] = this.token;
     }
 
     const config = {

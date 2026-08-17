@@ -1,0 +1,11 @@
+{
+  "buildCommand": "cd visual-brain && npm install && npm run build",
+  "outputDirectory": "visual-brain/dist",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
