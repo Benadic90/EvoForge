@@ -171,7 +171,7 @@ class ProjectScanner:
             timestamp=datetime.utcnow()
         )
 
-        # 3. Generate raw items for backlog
+        # 3. Generate raw items for backlog (GitHub Issues + Autonomous Engineering Upgrades)
         raw_items = []
         for issue in issues:
             raw_items.append({
@@ -185,6 +185,63 @@ class ProjectScanner:
                 "risk_hint": "LOW",
                 "metadata": {"labels": issue.get("labels", [])}
             })
+
+        # 4. Proactive Autonomous Engineering Upgrades (Continuous 24/7 Lead Engineer Roadmap)
+        autonomous_upgrades = [
+            {
+                "source": "autonomous_engine",
+                "source_type": "architecture_evolution",
+                "source_id": f"auto_arch_{profile.name.lower()}",
+                "source_url": None,
+                "title": f"Architecture Evolution: Modularize and modernize core components for {profile.name}",
+                "description": f"Perform automated architectural inspection of {repo}, enforce clean module separation, reduce coupling, and modernize asynchronous execution patterns.",
+                "priority_hint": 0.85,
+                "risk_hint": "LOW",
+                "metadata": {"category": "architecture", "autonomous": True}
+            },
+            {
+                "source": "autonomous_engine",
+                "source_type": "test_hardening",
+                "source_id": f"auto_test_{profile.name.lower()}",
+                "source_url": None,
+                "title": f"Test Hardening: Generate automated unit & regression test suites for {profile.name}",
+                "description": f"Audit test coverage across {repo}, generate edge-case unit tests, mock external boundaries, and ensure CI test verification passes.",
+                "priority_hint": 0.80,
+                "risk_hint": "LOW",
+                "metadata": {"category": "testing", "autonomous": True}
+            },
+            {
+                "source": "autonomous_engine",
+                "source_type": "security_audit",
+                "source_id": f"auto_sec_{profile.name.lower()}",
+                "source_url": None,
+                "title": f"Security & Dependency Hardening: Update dependencies and sanitize inputs for {profile.name}",
+                "description": f"Scan {repo} dependencies for CVE vulnerabilities, pin secure versions, sanitize external data flows, and enforce strict typing.",
+                "priority_hint": 0.75,
+                "risk_hint": "LOW",
+                "metadata": {"category": "security", "autonomous": True}
+            },
+            {
+                "source": "autonomous_engine",
+                "source_type": "documentation_evolution",
+                "source_id": f"auto_doc_{profile.name.lower()}",
+                "source_url": None,
+                "title": f"Documentation Evolution: Generate comprehensive API specs & developer guides for {profile.name}",
+                "description": f"Analyze codebase interfaces in {repo} and generate high-clarity docstrings, architecture diagrams, and complete README developer guides.",
+                "priority_hint": 0.60,
+                "risk_hint": "LOW",
+                "metadata": {"category": "documentation", "autonomous": True}
+            }
+        ]
+
+        existing_task_sources = set()
+        if self.db:
+            rows = self.db.fetchall("SELECT source_id FROM portfolio_tasks WHERE project_id = ?", (project_id,))
+            existing_task_sources = {r["source_id"] for r in rows}
+
+        for upg in autonomous_upgrades:
+            if upg["source_id"] not in existing_task_sources:
+                raw_items.append(upg)
 
         # Update ProjectProfile
         profile.health = overall_health
