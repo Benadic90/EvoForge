@@ -239,6 +239,11 @@ class SchedulerEngine:
         now_iso = datetime.now(UTC).isoformat()
         self._update_state(status="RUNNING", last_tick=now_iso)
 
+        if not self.gh_client or getattr(self.gh_client, 'token', None) is None:
+            logger.warning("GITHUB_UNAVAILABLE")
+            self._update_state(status="RUNNING", last_failure=now_iso)
+            return
+
         try:
             self.enqueue_portfolio_tasks()
             self.execute_pending_workflows()

@@ -77,7 +77,8 @@ emitter.store = SQLiteEventStore(db)
 agent_registry = build_agent_registry(None, None)
 executor_registry = create_default_executor_registry(config, db)
 worker_registry = WorkerRegistry(db)
-scheduler = SchedulerEngine(db, None, None)
+gh_client = GitHubClient(db=db)
+scheduler = SchedulerEngine(db, gh_client, None)
 
 
 
