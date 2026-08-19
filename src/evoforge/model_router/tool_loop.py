@@ -18,11 +18,11 @@ class ToolLoopRunner:
         self.model_id = model_id
         self.timeout_seconds = timeout_seconds
 
-    def get_github_token(self) -> str | None:
-        if self.db:
-            rows = self.db.fetchall("SELECT value FROM system_settings WHERE key = 'github_pat'")
-            if rows and rows[0]["value"]:
-                return rows[0]["value"]
+    def get_github_token(self):
+        from evoforge.github_integration.client import GitHubClient
+        client = GitHubClient(db=self.db)
+        if client.token:
+            return client.token
         return os.environ.get("GITHUB_TOKEN")
 
     def run(self, context: AgentContext, api_key: str) -> AgentResult:
@@ -264,5 +264,8 @@ class ToolLoopRunner:
             workflow_id=context.workflow_id,
             summary=msg,
             errors=[msg],
-            metrics={"failure_class": code}
+            metrics={
+                "failure_class": code,
+                "latency_ms": 1.0,
+            }
         )

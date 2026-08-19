@@ -210,7 +210,7 @@ class GeminiExecutor(AgentExecutor):
         timeout_seconds: float = 60.0,
     ):
         self.db = db
-        self.model_id = model_id
+        self.model_id = model_id if model_id.startswith("gemini/") else f"gemini/{model_id}"
         self.timeout_seconds = timeout_seconds
 
     def _get_api_key(self) -> str | None:
