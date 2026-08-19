@@ -272,6 +272,7 @@ class OrchestratorEngine:
             if successful_result:
                 task.status = WorkflowStage.COMPLETE
                 task.context["result"] = successful_result.summary
+                task.context["agent_result"] = successful_result
                 emitter.emit("task.completed", task_id=task.id, workflow_id=state.workflow_id, agent_id=task.agent_type)
                 if self.learning:
                     details = {"complexity": "unknown", "result_summary": successful_result.summary[:100]}

@@ -264,6 +264,11 @@ class GeminiExecutor(AgentExecutor):
                 },
             )
 
+        if context.required_capabilities and any(c.name == "TERMINAL" for c in context.required_capabilities):
+            from evoforge.model_router.tool_loop import ToolLoopRunner
+            runner = ToolLoopRunner(db=self.db, model_id=self.model_id, timeout_seconds=self.timeout_seconds)
+            return runner.run(context, api_key)
+
         start_time = time.time()
         prompt = (
             f"You are executing an autonomous engineering task.\n"

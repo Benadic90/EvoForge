@@ -41,6 +41,16 @@ class AgentResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     next_action: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    
+    # Real execution loop fields
+    changed_files: list[str] = Field(default_factory=list)
+    tests_run: list[str] = Field(default_factory=list)
+    tests_passed: bool | None = None
+    tests_failed: bool | None = None
+    git_status: str | None = None
+    workspace: str | None = None
+    commit_required: bool = False
+    failure_class: str | None = None
 
 
 class FailurePolicy(BaseModel):

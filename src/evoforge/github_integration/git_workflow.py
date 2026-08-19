@@ -29,13 +29,19 @@ class AutonomousGitWorkflow:
         task_description: str,
         solution_summary: str,
         file_changes: dict[str, str] | None = None,
+        agent_result=None,
     ) -> str | None:
         """
-        Clones the repo, creates a branch, commits the generated code/patches,
-        pushes to GitHub, and creates a real Pull Request.
+        Consumes a validated workspace diff or legacy fallback.
         """
         token = self.client.token
-        if solution_summary == "NO_CHANGES_REQUIRED" or (not solution_summary and not file_changes):
+        
+        # If AgentResult has workspace and no commit is required (e.g. no changes)
+        if agent_result and agent_result.workspace and not agent_result.commit_required:
+            logger.info("no_changes_required_skipping_git_push", repo=repo_full_name, task_id=task_id)
+            return "NO_CHANGES_REQUIRED"
+            
+        if solution_summary == "NO_CHANGES_REQUIRED" or (not solution_summary and not file_changes and not agent_result):
             logger.info("no_changes_required_skipping_git_push", repo=repo_full_name, task_id=task_id)
             return "NO_CHANGES_REQUIRED"
 
@@ -45,56 +51,54 @@ class AutonomousGitWorkflow:
 
         clean_task_id = task_id.replace("task_", "").replace("-", "")[:8]
         branch_name = f"evoforge/patch-{clean_task_id}"
-        temp_dir = tempfile.mkdtemp(prefix="evoforge_git_")
 
         try:
-            # 1. Clone repository with authenticated token
-            clone_url = f"https://x-access-token:{token}@github.com/{repo_full_name}.git"
-            logger.info("cloning_repository", repo=repo_full_name, branch=branch_name)
+            if agent_result and agent_result.workspace:
+                # 1. Use the agent's pre-populated workspace
+                temp_dir = agent_result.workspace
+                
+                # Check for Markdown-only fake success
+                status_res = subprocess.run(["git", "status", "--porcelain"], cwd=temp_dir, capture_output=True, text=True, check=False)
+                git_lines = status_res.stdout.strip().split("\n")
+                if len(git_lines) == 1 and ".evoforge_task_" in git_lines[0]:
+                    return "NO_MEANINGFUL_CHANGE"
+                if not status_res.stdout.strip():
+                    return "NO_MEANINGFUL_CHANGE"
 
-            clone_res = subprocess.run(
-                ["git", "clone", "--depth", "1", clone_url, temp_dir],
-                capture_output=True,
-                text=True,
-                check=False
-            )
-            if clone_res.returncode != 0:
-                logger.error("git_clone_failed", error=clone_res.stderr)
-                return None
+                # If test execution failed, we DO NOT commit
+                if agent_result.tests_run and agent_result.tests_passed is False:
+                    logger.warning("tests_failed_skipping_commit", task_id=task_id)
+                    return "TESTS_FAILED"
+            else:
+                # Legacy path (for fallback/textual answers)
+                temp_dir = tempfile.mkdtemp(prefix="evoforge_git_")
+                clone_url = f"https://x-access-token:{token}@github.com/{repo_full_name}.git"
+                logger.info("cloning_repository", repo=repo_full_name, branch=branch_name)
+
+                clone_res = subprocess.run(
+                    ["git", "clone", "--depth", "1", clone_url, temp_dir],
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+                if clone_res.returncode != 0:
+                    logger.error("git_clone_failed", error=clone_res.stderr)
+                    return None
+
+                subprocess.run(["git", "checkout", "-b", branch_name], cwd=temp_dir, check=False)
+
+                if file_changes:
+                    for file_path, content in file_changes.items():
+                        full_path = os.path.join(temp_dir, file_path)
+                        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+                        with open(full_path, "w", encoding="utf-8") as f:
+                            f.write(content)
+                else:
+                    return "NO_MEANINGFUL_CHANGE" # Force no-markdown fake change
 
             # 2. Configure Git user
             subprocess.run(["git", "config", "user.name", "EvoForge Autonomous Agent"], cwd=temp_dir, check=False)
             subprocess.run(["git", "config", "user.email", "agent@evoforge.ai"], cwd=temp_dir, check=False)
-
-            # 3. Create and switch to new branch
-            subprocess.run(["git", "checkout", "-b", branch_name], cwd=temp_dir, check=False)
-
-            # 4. Apply file changes or create patch documentation
-            applied_changes = []
-            if solution_summary == "NO_CHANGES_REQUIRED":
-                logger.info("no_changes_required_skipping_git_push", repo=repo_full_name, task_id=task_id)
-                return "NO_CHANGES_REQUIRED"
-
-            if file_changes:
-                for file_path, content in file_changes.items():
-                    full_path = os.path.join(temp_dir, file_path)
-                    os.makedirs(os.path.dirname(full_path), exist_ok=True)
-                    with open(full_path, "w", encoding="utf-8") as f:
-                        f.write(content)
-                    applied_changes.append(file_path)
-            elif solution_summary and solution_summary.strip():
-                # If LLM generated text solution/patch, record it in EVOLVE_TASK_<ID>.md
-                doc_path = os.path.join(temp_dir, f".evoforge_task_{clean_task_id}.md")
-                with open(doc_path, "w", encoding="utf-8") as f:
-                    f.write("# EvoForge Autonomous Resolution\n\n")
-                    f.write(f"**Task:** {task_title}\n\n")
-                    f.write(f"**Description:**\n{task_description}\n\n")
-                    f.write(f"**Autonomous Solution:**\n\n{solution_summary}\n\n")
-                    f.write(f"Generated on: {datetime.now(UTC).isoformat()}\n")
-                applied_changes.append(f".evoforge_task_{clean_task_id}.md")
-            else:
-                logger.info("empty_solution_skipping_git_push", repo=repo_full_name, task_id=task_id)
-                return "NO_CHANGES_REQUIRED"
 
             # 5. Stage & commit
             subprocess.run(["git", "add", "."], cwd=temp_dir, check=False)

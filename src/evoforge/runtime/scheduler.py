@@ -211,12 +211,14 @@ class SchedulerEngine:
                 # Publish Git PR if changes produced
                 git_flow = AutonomousGitWorkflow(db=self.db)
                 solution = wtask.context.get("result", task_desc)
+                agent_res = wtask.context.get("agent_result")
                 pr_url = git_flow.publish_task_solution(
                     repo_full_name=repo_name,
                     task_id=task_id,
                     task_title=task_title,
                     task_description=task_desc,
                     solution_summary=solution,
+                    agent_result=agent_res,
                 )
                 if pr_url:
                     logger.info("scheduler_pr_published", url=pr_url)
