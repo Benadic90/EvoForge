@@ -23,13 +23,13 @@ providers:
     default_model: "qwen2.5-coder:7b-instruct-q4_K_M"
     timeout_seconds: 60.0
   gemini:
-    enabled: true
+    enabled: false
     default_model: "gemini/gemini-2.5-flash"
     timeout_seconds: 60.0
   nvidia:
     enabled: true
     endpoint: "https://integrate.api.nvidia.com/v1"
-    default_model: "deepseek-ai/deepseek-coder-33b-instruct"
+    default_model: "meta/llama-3.1-70b-instruct"
     timeout_seconds: 60.0
   antigravity:
     enabled: false

@@ -397,6 +397,26 @@ class NvidiaExecutor(AgentExecutor):
                 },
             )
 
+        if context.required_capabilities and any(c.name == "TERMINAL" for c in context.required_capabilities):
+            from evoforge.model_router.tool_loop import ToolLoopRunner
+            # LiteLLM needs openai/ prefix for generic OpenAI compatible endpoints
+            litellm_model = f"openai/{self.model_id}"
+            runner = ToolLoopRunner(db=self.db, model_id=litellm_model, timeout_seconds=self.timeout_seconds)
+            # Pass custom api_base explicitly to litellm via environment or wait, ToolLoopRunner might not take api_base.
+            # I must pass api_base. Wait, ToolLoopRunner internally calls litellm.completion(model=self.model_id, api_key=api_key).
+            # It doesn't pass api_base! I need to set OPENAI_API_BASE in the environment just for this run, or patch ToolLoopRunner.
+            
+            import os
+            original_api_base = os.environ.get("OPENAI_API_BASE")
+            os.environ["OPENAI_API_BASE"] = self.endpoint
+            try:
+                return runner.run(context, api_key)
+            finally:
+                if original_api_base is not None:
+                    os.environ["OPENAI_API_BASE"] = original_api_base
+                else:
+                    del os.environ["OPENAI_API_BASE"]
+
         start_time = time.time()
         prompt = (
             f"You are executing an autonomous engineering task.\n"
