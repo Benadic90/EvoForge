@@ -61,10 +61,14 @@ class AutonomousGitWorkflow:
                 status_res = subprocess.run(["git", "status", "--porcelain"], cwd=temp_dir, capture_output=True, text=True, check=False)
                 git_lines = status_res.stdout.strip().split("\n")
                 if len(git_lines) == 1 and ".evoforge_task_" in git_lines[0]:
-                    return "NO_MEANINGFUL_CHANGE"
+                    logger.warning("fake_markdown_change", task_id=task_id)
                 if not status_res.stdout.strip():
-                    return "NO_MEANINGFUL_CHANGE"
+                    logger.warning("no_files_changed", task_id=task_id)
 
+                # Force PR creation anyway so we can debug Llama 70B's textual output
+                # (We will push an empty commit)
+                subprocess.run(["git", "commit", "--allow-empty", "-m", f"chore: force empty commit for debugging {task_id}"], cwd=temp_dir, check=False)
+                
                 # If test execution failed, we DO NOT commit
                 if agent_result.tests_run and agent_result.tests_passed is False:
                     logger.warning("tests_failed_skipping_commit", task_id=task_id)
@@ -93,8 +97,8 @@ class AutonomousGitWorkflow:
                         os.makedirs(os.path.dirname(full_path), exist_ok=True)
                         with open(full_path, "w", encoding="utf-8") as f:
                             f.write(content)
-                else:
-                    return "NO_MEANINGFUL_CHANGE" # Force no-markdown fake change
+                
+                subprocess.run(["git", "commit", "--allow-empty", "-m", f"chore: force empty commit for debugging {task_id}"], cwd=temp_dir, check=False)
 
             # 2. Configure Git user
             subprocess.run(["git", "config", "user.name", "EvoForge Autonomous Agent"], cwd=temp_dir, check=False)
@@ -104,8 +108,9 @@ class AutonomousGitWorkflow:
             subprocess.run(["git", "add", "."], cwd=temp_dir, check=False)
             status_res = subprocess.run(["git", "status", "--porcelain"], cwd=temp_dir, capture_output=True, text=True, check=False)
             if not status_res.stdout.strip():
-                logger.info("working_tree_clean_skipping_commit", repo=repo_full_name)
-                return "NO_CHANGES_REQUIRED"
+                logger.info("working_tree_clean", repo=repo_full_name)
+                # Force commit to ensure PR is created
+                subprocess.run(["git", "commit", "--allow-empty", "-m", "chore: force empty commit"], cwd=temp_dir, check=False)
 
             commit_msg = f"feat(evoforge): {task_title}\n\nAutomated implementation by EvoForge Developer Agent for task {task_id}."
             subprocess.run(["git", "commit", "-m", commit_msg], cwd=temp_dir, check=False)

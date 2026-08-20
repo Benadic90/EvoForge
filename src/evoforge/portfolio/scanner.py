@@ -235,13 +235,14 @@ class ProjectScanner:
             {
                 "source": "autonomous_engine",
                 "source_type": "user_requested_task",
-                "source_id": f"live_test_{profile.name.lower()}_v16",
+                "source_id": f"live_test_{profile.name.lower()}_v18",
                 "source_url": None,
-                "title": f"Live Tool Loop Test v16: Create test file in {profile.name}",
+                "title": f"Live Tool Loop Test v18: Create test file in {profile.name}",
                 "description": f"CLONE {repo}. CREATE a new file named 'hello_autonomous.py' in the root directory containing exactly 'print(1)'. Use the write_file tool. Do not do anything else. This must be a real file change to succeed.",
                 "priority_hint": 0.99,
                 "risk_hint": "LOW",
                 "estimated_minutes": 5,
+                "required_capabilities": ["TERMINAL"],
                 "metadata": {"category": "testing", "autonomous": True}
             }
         ]
