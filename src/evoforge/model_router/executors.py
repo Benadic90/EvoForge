@@ -598,31 +598,35 @@ def create_default_executor_registry(config: Any = None, db: Database | None = N
     )
 
     # Gemini
-    registry.register("gemini", GeminiExecutor(db=db, model_id="gemini/gemini-3.1-pro-preview-customtools"), [
-        AgentCapability.CODING,
-        AgentCapability.REASONING,
-        AgentCapability.REFACTORING,
-        AgentCapability.MULTI_FILE_EDITING,
-        AgentCapability.REPO_NAVIGATION,
-        AgentCapability.TERMINAL,
-        AgentCapability.PLANNING,
-    ])
-
-    # NVIDIA
-    nvid_mod = config.providers.nvidia.default_model if (config and hasattr(config, "providers")) else None
-    nvid_ep = config.providers.nvidia.endpoint if (config and hasattr(config, "providers")) else None
-    registry.register(
-        "nvidia",
-        NvidiaExecutor(model_id=nvid_mod, endpoint=nvid_ep, db=db),
-        [
+    gemini_enabled = config.providers.gemini.enabled if (config and hasattr(config, "providers")) else False
+    if gemini_enabled:
+        registry.register("gemini", GeminiExecutor(db=db, model_id="gemini/gemini-3.1-pro-preview-customtools"), [
             AgentCapability.CODING,
             AgentCapability.REASONING,
             AgentCapability.REFACTORING,
             AgentCapability.MULTI_FILE_EDITING,
+            AgentCapability.REPO_NAVIGATION,
             AgentCapability.TERMINAL,
             AgentCapability.PLANNING,
-        ],
-    )
+        ])
+
+    # NVIDIA
+    nvid_mod = config.providers.nvidia.default_model if (config and hasattr(config, "providers")) else None
+    nvid_ep = config.providers.nvidia.endpoint if (config and hasattr(config, "providers")) else None
+    nvid_en = config.providers.nvidia.enabled if (config and hasattr(config, "providers")) else False
+    if nvid_en:
+        registry.register(
+            "nvidia",
+            NvidiaExecutor(model_id=nvid_mod, endpoint=nvid_ep, db=db),
+            [
+                AgentCapability.CODING,
+                AgentCapability.REASONING,
+                AgentCapability.REFACTORING,
+                AgentCapability.MULTI_FILE_EDITING,
+                AgentCapability.TERMINAL,
+                AgentCapability.PLANNING,
+            ],
+        )
 
 
     # Antigravity
