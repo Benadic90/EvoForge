@@ -410,7 +410,10 @@ class NvidiaExecutor(AgentExecutor):
             original_api_base = os.environ.get("OPENAI_API_BASE")
             os.environ["OPENAI_API_BASE"] = self.endpoint
             try:
-                return runner.run(context, api_key)
+                res = runner.run(context, api_key)
+                # Ensure we log the outcome since telemetry hides the summary
+                logger.info("tool_loop_completed", task_id=context.task_id, success=res.success, summary=res.summary, changed_files=res.changed_files)
+                return res
             finally:
                 if original_api_base is not None:
                     os.environ["OPENAI_API_BASE"] = original_api_base

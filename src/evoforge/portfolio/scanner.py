@@ -235,12 +235,13 @@ class ProjectScanner:
             {
                 "source": "autonomous_engine",
                 "source_type": "user_requested_task",
-                "source_id": f"live_test_{profile.name.lower()}_v15",
+                "source_id": f"live_test_{profile.name.lower()}_v16",
                 "source_url": None,
-                "title": f"Live Tool Loop Test v15: Safely improve documentation or add a small test in {profile.name}",
-                "description": f"CLONE {repo}. Find a file. Make a tiny safe improvement (like a docstring or a basic unit test). RUN TESTS to verify it passes. The change must be real source code.",
+                "title": f"Live Tool Loop Test v16: Create test file in {profile.name}",
+                "description": f"CLONE {repo}. CREATE a new file named 'hello_autonomous.py' in the root directory containing exactly 'print(1)'. Use the write_file tool. Do not do anything else. This must be a real file change to succeed.",
                 "priority_hint": 0.99,
                 "risk_hint": "LOW",
+                "estimated_minutes": 5,
                 "metadata": {"category": "testing", "autonomous": True}
             }
         ]
