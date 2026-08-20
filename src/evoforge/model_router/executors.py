@@ -578,7 +578,7 @@ def create_default_executor_registry(config: Any = None, db: Database | None = N
     )
 
     # Gemini
-    registry.register("gemini", GeminiExecutor(db=db, model_id="gemini/gemini-pro"), [
+    registry.register("gemini", GeminiExecutor(db=db, model_id="gemini/gemini-2.5-pro"), [
         AgentCapability.CODING,
         AgentCapability.REASONING,
         AgentCapability.REFACTORING,
