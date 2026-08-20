@@ -235,9 +235,9 @@ class ProjectScanner:
             {
                 "source": "autonomous_engine",
                 "source_type": "user_requested_task",
-                "source_id": f"live_test_{profile.name.lower()}_v4",
+                "source_id": f"live_test_{profile.name.lower()}_v5",
                 "source_url": None,
-                "title": f"Live Tool Loop Test v4: Safely improve documentation or add a small test in {profile.name}",
+                "title": f"Live Tool Loop Test v5: Safely improve documentation or add a small test in {profile.name}",
                 "description": f"CLONE {repo}. Find a file. Make a tiny safe improvement (like a docstring or a basic unit test). RUN TESTS to verify it passes. The change must be real source code.",
                 "priority_hint": 0.99,
                 "risk_hint": "LOW",

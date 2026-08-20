@@ -153,8 +153,7 @@ class ToolLoopRunner:
                     messages=messages,
                     api_key=api_key,
                     tools=tools,
-                    timeout=self.timeout_seconds,
-                    num_retries=3
+                    timeout=self.timeout_seconds
                 )
                 
                 msg = response.choices[0].message
