@@ -132,11 +132,11 @@ class ToolLoopRunner:
             messages = [
                 {
                     "role": "system",
-                    "content": "You are a software engineer modifying a codebase. You have access to tools to read, write, list files, and run shell commands (like tests). You MUST run the repository's tests before finishing if you make changes."
+                    "content": "You are a software engineer modifying a codebase. You have access to tools to read, write, list files, and run shell commands (like tests). YOU MUST BE EXTREMELY CONCISE. MAKE EXACTLY ONE CHANGE. YOU MUST RUN TESTS using shell_execute BEFORE YOU FINISH. When you are done, DO NOT CALL ANY MORE TOOLS. Output a final text summary of your changes to finish the task."
                 },
                 {
                     "role": "user",
-                    "content": f"Task: {context.task_description}\nRepository is cloned in your workspace. Start by exploring."
+                    "content": f"Task: {context.task_description}\nRepository is cloned in your workspace. Start by exploring using list_files and read_file. Find a simple file, edit it with write_file, run tests using shell_execute (e.g. ['pytest']), then output your final summary."
                 }
             ]
 
@@ -147,12 +147,14 @@ class ToolLoopRunner:
             tests_passed = None
 
             for i in range(max_iterations):
+                time.sleep(10)  # Respect free tier rate limits (15 RPM)
                 response = litellm.completion(
                     model=self.model_id,
                     messages=messages,
                     api_key=api_key,
                     tools=tools,
-                    timeout=self.timeout_seconds
+                    timeout=self.timeout_seconds,
+                    num_retries=3
                 )
                 
                 msg = response.choices[0].message

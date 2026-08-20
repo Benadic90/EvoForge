@@ -283,6 +283,7 @@ class GeminiExecutor(AgentExecutor):
                 messages=messages,
                 api_key=api_key,
                 timeout=self.timeout_seconds,
+                num_retries=3
             )
             duration_ms = (time.time() - start_time) * 1000.0
             content = response.choices[0].message.content or ""
