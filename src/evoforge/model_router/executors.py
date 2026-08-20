@@ -206,7 +206,7 @@ class GeminiExecutor(AgentExecutor):
     def __init__(
         self,
         db: Database | None = None,
-        model_id: str = "gemini/gemini-2.5-flash",
+        model_id: str = "gemini/gemini-1.5-flash",
         timeout_seconds: float = 60.0,
     ):
         self.db = db
@@ -578,8 +578,7 @@ def create_default_executor_registry(config: Any = None, db: Database | None = N
     )
 
     # Gemini
-    gem_mod = config.providers.gemini.default_model if (config and hasattr(config, "providers")) else None
-    registry.register("gemini", GeminiExecutor(db=db, model_id=gem_mod if gem_mod else "gemini/gemini-2.5-flash"), [
+    registry.register("gemini", GeminiExecutor(db=db, model_id="gemini/gemini-1.5-flash"), [
         AgentCapability.CODING,
         AgentCapability.REASONING,
         AgentCapability.REFACTORING,
